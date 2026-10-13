@@ -27,6 +27,8 @@ public class PlannerView extends MapView {
     private boolean fast = false;
     private UI.Grab drag = null;
     private int dragb;
+    /** Whether the current drag turns the camera (right drag; in play mode middle drag too) rather than panning. */
+    private boolean camdrag;
     private Coord dragc, dragstart;
     public final Plan plan;
     public final Selection sel;
@@ -384,7 +386,8 @@ public class PlannerView extends MapView {
             }
             /* Right or middle drag turns the game camera, as in the game. */
             if(drag == null) {
-                dragb = 3;
+                dragb = ev.b;
+                camdrag = true;
                 dragc = dragstart = ev.c;
                 camera.click(ev.c);
                 drag = ui.grabmouse(this);
@@ -408,6 +411,7 @@ public class PlannerView extends MapView {
         }
         if((ev.b == 2 || ev.b == 3) && drag == null) {
             dragb = ev.b;
+            camdrag = (ev.b == 3);
             dragc = dragstart = ev.c;
             if(ev.b == 3)
                 camera.click(ev.c);
@@ -419,7 +423,7 @@ public class PlannerView extends MapView {
 
     public void mousemove(MouseMoveEvent ev) {
         if(drag != null) {
-            if(dragb == 3) {
+            if(camdrag) {
                 camera.drag(ev.c);
             } else {
                 Coord d = ev.c.sub(dragc);
@@ -460,7 +464,7 @@ public class PlannerView extends MapView {
             return(true);
         }
         if(drag != null && ev.b == dragb) {
-            if(dragb == 3) {
+            if(camdrag) {
                 camera.release();
                 /* A right click that did not orbit stops placing. */
                 if(placingres != null && ev.c.dist(dragstart) < 4)
