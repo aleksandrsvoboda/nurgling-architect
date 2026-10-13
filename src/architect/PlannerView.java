@@ -38,6 +38,9 @@ public class PlannerView extends MapView {
     /** Set by the runner once the terrain store exists. */
     public TerrainTool terrain = null;
     public final PlayMode play;
+    public final BlueprintTool blueprints;
+    /** Short messages for the status bar (set by the runner). */
+    public java.util.function.Consumer<String> onmsg = s -> {};
     public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 4;
     /** Grass and flowers (flavour objects) only this many cuts around the camera; bare ground reaches further. */
     public static final int FLAVVIEW = 3;
@@ -65,6 +68,7 @@ public class PlannerView extends MapView {
         this.collisions = new Collisions(plan);
         this.areas = new AreaTool(this);
         this.play = new PlayMode(this);
+        this.blueprints = new BlueprintTool(this);
         if(gridbounds != null) {
             Coord2d gsz = MCache.tilesz.mul(Coord2d.of(MCache.cmaps));
             boundul = gsz.mul(Coord2d.of(gridbounds.ul));
@@ -203,6 +207,34 @@ public class PlannerView extends MapView {
         List<PlanObject> ret = new ArrayList<>(l);
         ret.remove(x);
         return(ret);
+    }
+
+    public void toast(String s) {
+        onmsg.accept(s);
+    }
+
+    /** Starts stamping a blueprint preset; other tools step aside. */
+    public void stampblueprint(architect.io.Blueprints.Preset p) {
+        cancelplace();
+        sel.clear();
+        areas.on = false;
+        if(terrain != null)
+            terrain.on = false;
+        play.stop();
+        blueprints.stamp(p);
+        blueprints.hover(ui.mc.sub(rootpos()));
+    }
+
+    /** Ghosts for the blueprint stamp (the same ghosts placing uses). */
+    void blueprintpreview(List<PlanObject> objs) {
+        if(objs.isEmpty())
+            clearpreview();
+        else
+            showpreview(objs);
+    }
+
+    int previewcount() {
+        return(preview.size());
     }
 
     public String placing() {
@@ -474,6 +506,7 @@ public class PlannerView extends MapView {
         else
             keypan(dt);
         plan.tick();
+        blueprints.tick();
         if(terrain != null)
             terrain.tick();
         collisions.tick();
@@ -530,6 +563,14 @@ public class PlannerView extends MapView {
             }
             return(true);
         }
+        if(ev.b == 1 && blueprints.stamping()) {
+            blueprints.place();
+            return(true);
+        }
+        if(ev.b == 1 && blueprints.regionarmed()) {
+            blueprints.regionpress(ev.c);
+            return(true);
+        }
         if(ev.b == 1) {
             if(plob() != null) {
                 if(placeready) {
@@ -557,6 +598,14 @@ public class PlannerView extends MapView {
         return(true);
     }
 
+    public boolean mousewheel(MouseWheelEvent ev) {
+        if(blueprints.stamping()) {
+            blueprints.turn((ev.a > 0) ? 1 : -1);
+            return(true);
+        }
+        return(super.mousewheel(ev));
+    }
+
     public void mousemove(MouseMoveEvent ev) {
         if(drag != null) {
             if(camdrag) {
@@ -579,12 +628,20 @@ public class PlannerView extends MapView {
             areas.hover(ev.c);
         if(linepress != null)
             linedrag(ev.c, ui.modflags());
+        if(blueprints.stamping())
+            blueprints.hover(ev.c);
+        else if(blueprints.regiondragging())
+            blueprints.regiondrag(ev.c);
         super.mousemove(ev);
     }
 
     public boolean mouseup(MouseUpEvent ev) {
         if(ev.b == 1 && linepress != null) {
             lineend();
+            return(true);
+        }
+        if(ev.b == 1 && blueprints.regiondragging()) {
+            blueprints.regionrelease();
             return(true);
         }
         if(ev.b == 1 && terrain != null && terrain.dragging()) {
@@ -603,8 +660,14 @@ public class PlannerView extends MapView {
             if(camdrag) {
                 camera.release();
                 /* A right click that did not orbit stops placing. */
-                if(placingres != null && ev.c.dist(dragstart) < 4)
-                    cancelplace();
+                if(ev.c.dist(dragstart) < 4) {
+                    if(placingres != null)
+                        cancelplace();
+                    else if(blueprints.stamping())
+                        blueprints.cancel();
+                    else if(blueprints.regionarmed())
+                        blueprints.cancelregion();
+                }
             }
             drag.remove();
             drag = null;
@@ -638,6 +701,8 @@ public class PlannerView extends MapView {
                 return(true);
             }
         }
+        if(blueprints.key(ev))
+            return(true);
         if(placingres != null) {
             if(ev.code == KeyEvent.VK_ESCAPE) {
                 cancelplace();

@@ -38,6 +38,7 @@ public class PlannerRunner implements UI.Runner {
     private volatile double toastuntil = 0;
     private int savedseq = -1, savedlseq = -1, savedaseq = -1, savedtseq = -1;
     private PlannerView view;
+    private Screen screen;
 
     public PlannerRunner(WorldSource world, Path file, String name, PlanFile.Data loaded) {
         this(world, file, name, loaded, false);
@@ -183,6 +184,20 @@ public class PlannerRunner implements UI.Runner {
         }
     }
 
+    void toggleBlueprints() {
+        Screen scr = screen;
+        if(scr == null)
+            return;
+        if(scr.blueprints.visible) {
+            scr.blueprints.hide();
+            view.blueprints.cancel();
+            view.blueprints.cancelregion();
+        } else {
+            scr.blueprints.show();
+            scr.blueprints.raise();
+        }
+    }
+
     void toggleAreas() {
         if(view.play.on)
             view.play.stop();
@@ -228,7 +243,8 @@ public class PlannerRunner implements UI.Runner {
                  new ToolButton("Redo", () -> plan.redo())},
                 {new ToolButton("Areas", () -> view.areas.on, PlannerRunner.this::toggleAreas),
                  new ToolButton("Terrain", () -> view.terrain.on, PlannerRunner.this::toggleTerrain),
-                 new ToolButton("Play", () -> view.play.on, PlannerRunner.this::togglePlay)},
+                 new ToolButton("Play", () -> view.play.on, PlannerRunner.this::togglePlay),
+                 new ToolButton("Blueprints", () -> (screen != null) && screen.blueprints.visible, PlannerRunner.this::toggleBlueprints)},
                 {new ToolButton("Collision", () -> view.collisions.enabled, () -> view.collisions.toggle())},
             };
             int h = 0;
@@ -278,6 +294,7 @@ public class PlannerRunner implements UI.Runner {
         final Speedget speeds;
         final TerrainPanel terrainpanel;
         final WallBar wallbar;
+        final BlueprintsPanel blueprints;
         final RenderAudit audit;
 
         Screen(Coord sz) {
@@ -310,6 +327,10 @@ public class PlannerRunner implements UI.Runner {
             }), 0, 0);
             wallbar.hide();
             audit = Boolean.getBoolean("architect.renderaudit") ? new RenderAudit(view) : null;
+            view.onmsg = PlannerRunner.this::msg;
+            view.blueprints.placed = (p, n) -> msg(String.format("Placed %s (%d objects); Ctrl+Z takes it back", p.name, n));
+            blueprints = add(new BlueprintsPanel(view, PlannerRunner.this::msg), 0, 0);
+            blueprints.hide();
         }
 
         int sideh() {
@@ -337,6 +358,10 @@ public class PlannerRunner implements UI.Runner {
                 return(progress);
             if(view.play.on)
                 return("Play mode   Click: walk there   WASD: move   1-4: crawl/walk/run/sprint   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back");
+            if(view.blueprints.stamping())
+                return("Placing blueprint " + view.blueprints.stampname() + "   Wheel / R: turn   F: mirror   Click: place   Esc / right click: cancel");
+            if(view.blueprints.regionarmed())
+                return("Save region: drag a rectangle on the ground   Esc / right click: cancel");
             if(architect.edit.Walls.kit(view.placing()) != null)
                 return("Drag from a post: wall (8 directions)   Click: post / gate   Crossing a wall joins it   Ctrl/Shift+wheel, R: turn a lone gate   Esc / right click: stop");
             if(view.placing() != null)
@@ -359,6 +384,7 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
+        private double bpdemo = 0;
         private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
@@ -379,6 +405,9 @@ public class PlannerRunner implements UI.Runner {
                 speeds.show(!planning);
                 speeds.c = Coord.of(sz.x - speeds.sz.x - UI.scale(12), toolbar.sz.y + UI.scale(10));
             }
+            if(!planning && blueprints.visible)
+                blueprints.hide();
+            blueprints.c = Coord.of(Math.max(0, sz.x - LayersPanel.W - blueprints.sz.x - UI.scale(8)), toolbar.sz.y + UI.scale(8));
             if(layers.visible != planning) {
                 layers.show(planning);
                 if(panel != null)
@@ -396,6 +425,20 @@ public class PlannerRunner implements UI.Runner {
             Catalogue cat = catalogue;
             if(audit != null)
                 audit.tick(cat);
+            /* Dev: -Darchitect.bpdemo=File.json stamps that blueprint at the view centre a few seconds in, places
+             * it after a few more (for screenshots without touching the mouse). */
+            String demo = System.getProperty("architect.bpdemo");
+            if(demo != null && cat != null) {
+                if(bpdemo == 0)
+                    bpdemo = Utils.rtime() + 6;
+                else if(bpdemo > 0 && Utils.rtime() > bpdemo) {
+                    blueprints.demo(demo);
+                    view.blueprints.at(view.cc.floor(MCache.tilesz));
+                    bpdemo = -(Utils.rtime() + 8);
+                } else if(bpdemo < 0 && Utils.rtime() > -bpdemo && view.blueprints.stamping()) {
+                    view.blueprints.place();
+                }
+            }
             if(panel == null && cat != null) {
                 panel = add(new CataloguePanel(cat, sideh(), e -> {
                     view.place(e.res, e.sdt);
@@ -434,6 +477,10 @@ public class PlannerRunner implements UI.Runner {
         }
 
         public boolean keydown(KeyDownEvent ev) {
+            if(ev.code == java.awt.event.KeyEvent.VK_B && (ev.mods & KeyMatch.C) != 0 && !view.play.on) {
+                blueprints.saveselectionkey();
+                return(true);
+            }
             if(ev.code == java.awt.event.KeyEvent.VK_S && (ev.mods & KeyMatch.C) != 0) {
                 if(save())
                     msg("Saved");
@@ -444,7 +491,6 @@ public class PlannerRunner implements UI.Runner {
     }
 
     public UI.Runner run(UI ui) throws InterruptedException {
-        Screen screen;
         synchronized(ui) {
             ui.core.mode = nurgling.NCore.Mode.IDLE;
             screen = ui.root.add(new Screen(ui.root.sz), Coord.z);

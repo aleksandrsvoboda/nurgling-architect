@@ -187,6 +187,84 @@ public class TestAll {
         check(grey == 2, "only Tinker's tools stay unplaceable (" + grey + ")");
     }
 
+    /** Blueprint presets: the game's own file reads and writes back, turns match the game, stamps round-trip. */
+    static void blueprints() throws Exception {
+        Path game = ArchitectEnv.root.resolve("test/architect/data/game-preset.json");
+        Blueprints.Preset p = Blueprints.load(game);
+        check(!p.foreign && p.kind == Blueprints.Kind.LAYER && p.w == 16 && p.h == 15 && p.count() == 3, "game preset reads");
+        Blueprints.Ghost caul = p.ghosts().stream().filter(g -> g.res.equals("gfx/terobjs/cauldron")).findFirst().orElse(null);
+        check(caul != null && caul.sdt.length == 2 && caul.sdt[1] == 8 && caul.x == 159.5 && Math.abs(caul.angle - Math.PI / 2) < 1e-12, "game ghost fields");
+        Blueprints.Preset again = Blueprints.parse(p.json());
+        check(again.json().similar(p.json()), "written back unchanged");
+
+        Path dir = Files.createTempDirectory("bp");
+        Blueprints.Preset imp = Blueprints.importFile(dir, game);
+        check(imp.file.equals("Layer_01.json") && Files.exists(dir.resolve("Layer_01.json")), "import names the file like the game");
+        org.json.JSONObject withextra = new org.json.JSONObject(new String(Files.readAllBytes(dir.resolve(imp.file)), "UTF-8"));
+        withextra.put("futurefield", 7);
+        Files.write(dir.resolve(imp.file), withextra.toString().getBytes("UTF-8"));
+        Blueprints.Preset re = Blueprints.load(dir.resolve(imp.file));
+        re.file = imp.file;
+        re.name = "Renamed";
+        Blueprints.write(dir, re);
+        org.json.JSONObject after = new org.json.JSONObject(new String(Files.readAllBytes(dir.resolve(imp.file)), "UTF-8"));
+        check(after.getString("name").equals("Renamed") && after.optInt("futurefield") == 7, "rename keeps unknown fields");
+        check(Files.exists(dir.resolve(imp.file + ".bak")), "rewrite keeps a .bak like the game");
+        Blueprints.Preset second = Blueprints.importFile(dir, game);
+        check(second.file.equals("Layer_01-2.json"), "taken names get -2 like the game");
+        Files.write(dir.resolve("newer.json"), "{\"format\":2,\"name\":\"Future\"}".getBytes("UTF-8"));
+        Blueprints.Preset fut = Blueprints.all(dir).stream().filter(x -> x.name.equals("Future")).findFirst().orElse(null);
+        boolean refused = false;
+        try {
+            Blueprints.write(dir, fut);
+        } catch(java.io.IOException e) {
+            refused = true;
+        }
+        check(fut != null && fut.foreign && refused, "newer formats listed, never rewritten");
+        check(Blueprints.slug("  Mill yard / east!! ").equals("Mill_yard_east"), "slug like the game");
+
+        /* turning: one quarter turn of a 2x1 box, as the game's PlannerPreset.transformed does it */
+        Blueprints.Preset t = new Blueprints.Preset();
+        t.w = 2; t.h = 1;
+        Blueprints.Layer tl = new Blueprints.Layer("L");
+        tl.ghosts.add(new Blueprints.Ghost("gfx/terobjs/cupboard", null, 16.5, 5.5, 0));
+        t.layers.add(tl);
+        Blueprints.Ghost tg = t.transformed(1, false).ghosts().get(0);
+        Blueprints.Preset t1 = t.transformed(1, false);
+        check(t1.w == 1 && t1.h == 2 && tg.x == 5.5 && tg.y == 16.5 && Math.abs(tg.angle - Math.PI / 2) < 1e-12, "quarter turn");
+        Blueprints.Ghost mg = t.transformed(0, true).ghosts().get(0);
+        check(mg.x == 22 - 16.5 && Math.abs(mg.angle - Math.PI) < 1e-12, "mirror");
+        Blueprints.Ghost full = t.transformed(4, false).ghosts().get(0);
+        check(full.x == 16.5 && full.y == 5.5, "four turns are none");
+
+        /* capture a folder, stamp it elsewhere: same layout, new folder, one undo step */
+        Plan plan = new Plan(session().glob);
+        Layers.Node f = plan.layers.addFolder("Yard");
+        Layers.Node la = plan.layers.addLayer("Pens", f.id), lb = plan.layers.addLayer("Trough", f.id);
+        plan.add(new PlanObject("o1", "gfx/terobjs/cupboard", null, Coord2d.of(5 * 11 + 3, 7 * 11 + 5.5), 0, la.id));
+        plan.add(new PlanObject("o2", "gfx/terobjs/cauldron", new byte[] {0, 8}, Coord2d.of(9 * 11 + 5.5, 8 * 11 + 2), 1, lb.id));
+        Blueprints.Preset cap = BlueprintPlan.capturenode(plan, "Yard", f.id);
+        check(cap.kind == Blueprints.Kind.FOLDER && cap.layers.size() == 2 && cap.count() == 2, "folder captured");
+        Blueprints.Ghost c2 = cap.layers.get(1).ghosts.get(0);
+        check(c2.sdt.length == 2 && c2.sdt[1] == 8, "variant kept");
+        Blueprints.Preset loaded = Blueprints.parse(cap.json());
+        int before = plan.size(), nodes = plan.layers.all().size();
+        String made = BlueprintPlan.place(plan, loaded, Coord.of(40, 40), null);
+        check(plan.size() == before + 2 && plan.layers.all().size() == nodes + 3 && plan.layers.get(made).folder, "stamp makes a folder of layers");
+        PlanObject n1 = plan.objects().stream().filter(o -> !o.id.equals("o1") && o.res.equals("gfx/terobjs/cupboard")).findFirst().orElse(null);
+        PlanObject n2 = plan.objects().stream().filter(o -> !o.id.equals("o2") && o.res.equals("gfx/terobjs/cauldron")).findFirst().orElse(null);
+        Coord2d was = plan.get("o2").rc.sub(plan.get("o1").rc);
+        boolean same = n1 != null && n2 != null && n2.rc.sub(n1.rc).equals(was)
+            && (n1.rc.x - plan.get("o1").rc.x) % 11 == 0 && (n1.rc.y - plan.get("o1").rc.y) % 11 == 0 && n2.a == 1;
+        check(same, "stamp keeps the sub-tile layout");
+        plan.undo();
+        check(plan.size() == before && plan.layers.get(made) == null, "one undo removes the stamp and its folder");
+        plan.redo();
+        check(plan.size() == before + 2 && plan.layers.get(made) != null, "redo brings it back");
+        Blueprints.Preset reg = BlueprintPlan.captureregion(plan, "R", Coord2d.of(0, 0), Coord2d.of(9 * 11, 20 * 11));
+        check(reg.count() == 1 && reg.kind == Blueprints.Kind.LAYER, "region takes what is inside");
+    }
+
     public static void main(String[] args) throws Exception {
         /* Same isolated setup as the app, in a throwaway home: engine code reads nurgling config. */
         System.setProperty("architect.home", Files.createTempDirectory("architect-test").toString());
@@ -198,6 +276,7 @@ public class TestAll {
         terrain();
         walls();
         catalogue();
+        blueprints();
         System.out.println(passes + " passed, " + fails + " failed");
         System.exit(fails == 0 ? 0 : 1);
     }

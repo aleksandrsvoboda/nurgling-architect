@@ -68,7 +68,7 @@ public class Catalogue {
      * (Tinker's tools are items) or have no model the server will hand out.
      */
     static final String[][] MODELS = {
-        {"vstand", "gfx/terobjs/barterstand"}, {"symbelfire", "gfx/terobjs/bonfire"}, {"fireplace", "gfx/terobjs/pow"},
+        {"vstand", "gfx/terobjs/barterstand"}, {"symbelfire", "gfx/terobjs/bonfire"}, {"fireplace", "gfx/terobjs/pow:3"},
         {"primtent", "gfx/terobjs/arch/primitivetent"}, {"watermill", "gfx/terobjs/arch/waterwheelhouse"},
         {"minevator", "gfx/terobjs/minevator-top"}, {"stoneendstone", "gfx/terobjs/road/milestone-stone-e"},
         {"woodendstone", "gfx/terobjs/road/milestone-wood-e"}, {"ancaltar", "gfx/terobjs/ancestralshrine"},

@@ -97,6 +97,13 @@ public class Looks {
         }
     }
 
+    /** The default state already worked out for res (it has been drawn), or null if not yet known. */
+    public static byte[] known(String res) {
+        synchronized(cache) {
+            return(cache.get(res));
+        }
+    }
+
     public static boolean broken(String res) {
         return(broken.contains(res));
     }
