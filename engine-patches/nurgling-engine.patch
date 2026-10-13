@@ -1,0 +1,141 @@
+diff --git a/src/haven/MapView.java b/src/haven/MapView.java
+index 5c805430d..12d8fa53c 100644
+--- a/src/haven/MapView.java
++++ b/src/haven/MapView.java
+@@ -790,6 +790,9 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 	}
+ 	int view;
+ 	protected final MCache map;
++	/* Centre to follow when no GameUI owns a map (e.g. a standalone
++	 * MapView); the GameUI's map still wins whenever there is one. */
++	public java.util.function.Supplier<Coord3f> fallbackcc = null;
+ 	public Area area;
+ 	Loading lastload = new Loading("Initializing map...");
+ 
+@@ -807,9 +810,13 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 	    protected abstract T getcut(Coord cc);
+ 	    RenderTree.Node produce(T cut) {return((RenderTree.Node)cut);}
+ 
++	    /** The cuts this grid shows; the raster's whole area unless a subclass narrows it. */
++	    protected Area tickarea() {return(area);}
++
+ 	    public void tick() {
+ 		if(slot == null)
+ 		    return;
++		Area area = tickarea();
+ 		Loading curload = null;
+ 		for(Coord cc : area) {
+ 		    try {
+@@ -856,9 +863,14 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 	    /* XXX: Should be taken out of the main rendering
+ 	     * loop. Probably not a big deal, but still. */
+ 	    try {
+-		if(NUtils.getGameUI()==null || NUtils.getGameUI().map == null)
++		Coord3f mc;
++		if(NUtils.getGameUI() != null && NUtils.getGameUI().map != null)
++			mc = NUtils.getGameUI().map.getcc();
++		else if(fallbackcc != null)
++			mc = fallbackcc.get();
++		else
+ 			return;
+-		Coord cc = new Coord2d(NUtils.getGameUI().map.getcc()).floor(tilesz).div(MCache.cutsz);
++		Coord cc = new Coord2d(mc).floor(tilesz).div(MCache.cutsz);
+ 		area = new Area(cc.sub(view, view), cc.add(view, view).add(1, 1));
+ 		lastload = null;
+ 	    } catch(Loading l) {
+@@ -885,10 +897,23 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 		protected RenderTree.Node getcut(Coord cc) {
+ 		    return(map.getfo(cc));
+ 		}
++
++		protected Area tickarea() {
++		    int fv = flavview;
++		    if((fv < 0) || (fv >= Terrain.this.view) || (Terrain.this.area == null))
++			return(Terrain.this.area);
++		    /* Decorations (grass, flowers) only near the camera; bare ground beyond. */
++		    int d = Terrain.this.view - fv;
++		    Area a = Terrain.this.area;
++		    return(new Area(a.ul.add(d, d), a.br.sub(d, d)));
++		}
+ 	    };
++	/** Cuts of decoration (flavour objects) drawn around the camera; -1 = as far as the terrain. */
++	public int flavview = -1;
+ 
+ 	private Terrain() {
+ 		super(glob.map, MapView.this.view);
++		fallbackcc = MapView.this::getcc;
+ 	}
+ 
+ 	public void tick() {
+@@ -939,6 +964,7 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 
+ 	public Overlay(OverlayInfo id) {
+ 		super(glob.map, MapView.this.view);
++		fallbackcc = MapView.this::getcc;
+ 		this.id = id;
+ 	}
+ 
+@@ -1043,6 +1069,7 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 
+ 	private GridLines() {
+ 		super(glob.map, MapView.this.view);
++		fallbackcc = MapView.this::getcc;
+ 	}
+ 
+ 	public void tick() {
+@@ -1063,6 +1090,17 @@ public class MapView extends PView implements DTarget, Console.Directory {
+     }
+ 
+     GridLines gridlines = null;
++
++    /** Changes how many map cuts around the camera are drawn and requested; existing rasters follow. */
++    public void setview(int nview) {
++	view = nview;
++	terrain.view = nview;
++	clickmap.view = nview;
++	if(gridlines != null)
++	    gridlines.view = nview;
++	for(Overlay ol : ols.values())
++	    ol.view = nview;
++    }
+     public void showgrid(boolean show) {
+ 	if((gridlines == null) && show) {
+ 	    basic.add(gridlines = new GridLines());
+@@ -1089,6 +1127,7 @@ public class MapView extends PView implements DTarget, Console.Directory {
+ 		public ClickMap()
+ 		{
+ 			super(glob.map, MapView.this.view);
++		fallbackcc = MapView.this::getcc;
+ 		}
+ 
+ 		final Grid grid = new Grid<MapMesh>() {
+diff --git a/src/haven/ShadowMap.java b/src/haven/ShadowMap.java
+index 4905542b6..dca8ff8db 100644
+--- a/src/haven/ShadowMap.java
++++ b/src/haven/ShadowMap.java
+@@ -347,6 +347,13 @@ public class ShadowMap extends State {
+ 			    code.add(new Return(stablepcf.call(map.ref(), mapc, vec2(l(xd), l(yd)), l(thr))));
+ 			} else {
+ 			double xr = xd * (res - 1), yr = yd * (res - 1);
++			/* Outside the shadow box nothing is known: count it as lit, as the soft path does.
++			 * Without this, ground beyond the box's far depth compares against clamped edge
++			 * texels and turns dark, which a long view distance shows as a dark half-map. */
++			code.add(new If(or(or(or(le(pick(mapc, "x"), l(0.0)), ge(pick(mapc, "x"), l(1.0))),
++					      or(le(pick(mapc, "y"), l(0.0)), ge(pick(mapc, "y"), l(1.0)))),
++					   or(le(pick(mapc, "z"), l(0.0)), ge(pick(mapc, "z"), l(1.0)))),
++					new Return(l(1.0))));
+ 			boolean unroll = false;
+ 			if(!unroll) {
+ 			    LValue xo = code.local(FLOAT, null).ref();
+diff --git a/src/nurgling/render/DirectionalShadows.java b/src/nurgling/render/DirectionalShadows.java
+index 45136edae..573ac26b3 100644
+--- a/src/nurgling/render/DirectionalShadows.java
++++ b/src/nurgling/render/DirectionalShadows.java
+@@ -98,6 +98,7 @@ public final class DirectionalShadows implements Disposable {
+         " if(blend>0.0) distant=hv_sfilter(farMap,fp,fg,vec2(1500.0/2048.0,0.45/5000.0));\n" +
+         " float farEdge=max(abs(fp.x*2.0-1.0),abs(fp.y*2.0-1.0));\n" +
+         " distant=mix(distant,1.0,smoothstep(0.90,1.0,farEdge));\n" +
++        " if(fp.z<=0.0 || fp.z>=1.0) distant=1.0;\n" +
+         " return mix(close,distant,blend);\n" +
+         "}\n");
+     private static AutoVarying coords(Uniform transform) {
