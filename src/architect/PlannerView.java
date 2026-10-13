@@ -3,6 +3,7 @@ package architect;
 import architect.edit.*;
 import haven.*;
 import haven.render.Projection;
+import haven.render.RenderTree;
 
 import java.awt.event.KeyEvent;
 import java.util.*;
@@ -44,6 +45,9 @@ public class PlannerView extends MapView {
     public static final String PREF_INVERTX = "camera-invert-x", PREF_INVERTY = "camera-invert-y";
     /** Options: reverse the planning cameras' drag (not play mode's). */
     public static boolean invertx = Utils.getprefb(PREF_INVERTX, false), inverty = Utils.getprefb(PREF_INVERTY, false);
+    public static final String PREF_GRIDWALLS = "grid-walls", PREF_BB = "bounding-boxes";
+    /** Option: nurgling's grid boundaries, walls standing on every map grid's edge, in the UI's orange. */
+    public static boolean gridwalls = Utils.getprefb(PREF_GRIDWALLS, false);
     public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 4;
     /** Grass and flowers (flavour objects) only this many cuts around the camera; bare ground reaches further. */
     public static final int FLAVVIEW = 3;
@@ -213,6 +217,51 @@ public class PlannerView extends MapView {
         List<PlanObject> ret = new ArrayList<>(l);
         ret.remove(x);
         return(ret);
+    }
+
+    /* Grid boundaries: nurgling's own wall overlay, rebuilt when the loaded grids change. */
+    private nurgling.overlays.NGridWallOverlay walls = null;
+    private RenderTree.Slot wallslot = null;
+    private Set<Coord> wallgrids = null;
+    static final java.awt.Color WALLCOLOR = new java.awt.Color(233, 156, 84, 200);
+
+    private void gridwalls() {
+        if(!gridwalls) {
+            if(wallslot != null) {
+                wallslot.remove();
+                wallslot = null;
+                walls = null;
+                wallgrids = null;
+            }
+            return;
+        }
+        Set<Coord> ready = new HashSet<>();
+        Coord2d gsz = MCache.tilesz.mul(Coord2d.of(MCache.cmaps));
+        synchronized(glob.map.grids) {
+            for(Coord gc : glob.map.grids.keySet()) {
+                /* only the plannable world, not the empty grids around it */
+                if(boundul != null && (gc.x * gsz.x > boundbr.x || gc.y * gsz.y > boundbr.y || (gc.x + 1) * gsz.x <= boundul.x || (gc.y + 1) * gsz.y <= boundul.y))
+                    continue;
+                ready.add(gc);
+            }
+        }
+        ready.removeIf(gc -> !nurgling.overlays.NGridWallOverlay.isReady(glob.map, gc));
+        if(walls != null && ready.equals(wallgrids))
+            return;
+        if(walls == null)
+            walls = new nurgling.overlays.NGridWallOverlay();
+        walls.rebuild(glob.map, ready, WALLCOLOR);
+        wallgrids = ready;
+        if(wallslot == null)
+            wallslot = basic.add(walls);
+    }
+
+    /** Ctrl+B, as in the game: nurgling's bounding boxes on every object. */
+    public void togglebb() {
+        boolean on = !(Boolean)nurgling.NConfig.get(nurgling.NConfig.Key.showBB);
+        nurgling.NConfig.set(nurgling.NConfig.Key.showBB, on);
+        Utils.setprefb(PREF_BB, on);
+        toast("Bounding boxes " + (on ? "on" : "off"));
     }
 
     private double warmat = -1;
@@ -534,6 +583,7 @@ public class PlannerView extends MapView {
         plan.tick();
         blueprints.tick();
         areas.tick();
+        gridwalls();
         warmclicks();
         if(terrain != null)
             terrain.tick();
@@ -738,6 +788,10 @@ public class PlannerView extends MapView {
                 camera = (camera instanceof OrbitCam) ? new SOrthoCam() : new OrbitCam();
                 return(true);
             }
+        }
+        if(ev.code == KeyEvent.VK_B && ctrl && (ev.mods & KeyMatch.S) == 0) {
+            togglebb();
+            return(true);
         }
         if(blueprints.key(ev))
             return(true);

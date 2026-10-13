@@ -482,6 +482,9 @@ public class Plan {
         return(g);
     }
 
+    /** Ids for planned objects' gobs: unique, and far below the engine's own virtual ids (which count down from -1). */
+    private static final java.util.concurrent.atomic.AtomicLong nextid = new java.util.concurrent.atomic.AtomicLong(-(1L << 40));
+
     /* Sprites throw Loading until their textures resolve, so gobs are built on the loader, which retries. */
     private void show(PlanObject o) {
         Indir<Resource> res = Resource.remote().load(o.res);
@@ -490,10 +493,10 @@ public class Plan {
                 if(objs.get(o.id) != o || o.gob != null || !layers.shown(o.layer))
                     return;
             }
-            /* Unique (virtual) ids: OCache keys objects by id; with a shared id it ticks and removes only one. */
-            Gob g = glob.oc.new Virtual(o.rc, o.a);
-            /* ...but clickable: the engine leaves virtual objects out of the click buffer, which made every
-             * planned object impossible to select or drag. */
+            Gob g = new Gob(glob, o.rc, nextid.getAndDecrement());
+            g.a = o.a;
+            /* A plain object, not a virtual one: the engine leaves virtual objects out of the click buffer (so
+             * they can't be selected) and nurgling's Ctrl placement snap skips them (so nothing sticks to them). */
             g.virtual = false;
             ResDrawable d = Looks.drawable(g, res.get(), o.sdt);
             if(d == null)

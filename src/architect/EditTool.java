@@ -220,12 +220,57 @@ public class EditTool {
         case KeyEvent.VK_R:
             turn(shift ? -Math.PI / 2 : Math.PI / 2);
             return(true);
+        case KeyEvent.VK_F:
+            mirror(shift);
+            return(true);
         case KeyEvent.VK_LEFT:  return(nudge(-1, 0, shift));
         case KeyEvent.VK_RIGHT: return(nudge(1, 0, shift));
         case KeyEvent.VK_UP:    return(nudge(0, -1, shift));
         case KeyEvent.VK_DOWN:  return(nudge(0, 1, shift));
         }
         return(false);
+    }
+
+    /**
+     * Mirrors the selection east-west (or north-south with ns) across the middle of its objects: positions
+     * flip and facings turn to match, as the game's preset mirror does; there are no mirrored models, so an
+     * object that isn't symmetric ends up turned rather than mirrored.
+     */
+    public void mirror(boolean ns) {
+        List<PlanObject> objs = sel.objects();
+        if(objs.isEmpty())
+            return;
+        double x0 = Double.MAX_VALUE, y0 = Double.MAX_VALUE, x1 = -Double.MAX_VALUE, y1 = -Double.MAX_VALUE;
+        for(PlanObject o : objs) {
+            x0 = Math.min(x0, o.rc.x); x1 = Math.max(x1, o.rc.x);
+            y0 = Math.min(y0, o.rc.y); y1 = Math.max(y1, o.rc.y);
+        }
+        double sx = x0 + x1, sy = y0 + y1;
+        plan.begin(ns ? "Mirror north-south" : "Mirror east-west");
+        try {
+            for(PlanObject o : objs) {
+                if(ns)
+                    plan.move(o, Coord2d.of(o.rc.x, sy - o.rc.y), Utils.cangle(-o.a));
+                else
+                    plan.move(o, Coord2d.of(sx - o.rc.x, o.rc.y), Utils.cangle(Math.PI - o.a));
+            }
+        } finally {
+            plan.commit();
+        }
+    }
+
+    /** Turns the selection a quarter turn, clockwise or back. */
+    public void turnsel(boolean back) {
+        turn(back ? -Math.PI / 2 : Math.PI / 2);
+    }
+
+    public void deletesel() {
+        delete();
+    }
+
+    public void duplicate() {
+        if(copy())
+            paste(sel.objects().get(0).rc.add(MCache.tilesz));
     }
 
     private void delete() {

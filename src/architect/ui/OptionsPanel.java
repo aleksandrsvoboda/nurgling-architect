@@ -18,7 +18,7 @@ public class OptionsPanel extends Widget {
     public OptionsPanel() {
         super(Coord.z);
         title = new Text.Foundry(Text.sans.deriveFont(java.awt.Font.BOLD), 13).aa(true).render("Options", NStyle.border).tex();
-        hint = new Text.Foundry(Text.sans, 10).aa(true).render("Camera drags while planning; play mode is unchanged", DIM).tex();
+        hint = new Text.Foundry(Text.sans, 10).aa(true).render("Camera inversions: planning cameras only; play mode is unchanged", DIM).tex();
         int y = PAD + title.sz().y + GAP;
         ToolButton v = add(new ToolButton("Invert vertical camera", () -> PlannerView.inverty, () -> {
             PlannerView.inverty = !PlannerView.inverty;
@@ -29,8 +29,20 @@ public class OptionsPanel extends Widget {
             PlannerView.invertx = !PlannerView.invertx;
             Utils.setprefb(PlannerView.PREF_INVERTX, PlannerView.invertx);
         }), PAD, y);
-        y += h.sz.y + GAP;
-        int w = Math.max(Math.max(v.sz.x, h.sz.x), hint.sz().x) + PAD * 2;
+        y += h.sz.y + GAP * 3;
+        ToolButton bb = add(new ToolButton("Bounding boxes  (Ctrl+B)", () -> (Boolean)nurgling.NConfig.get(nurgling.NConfig.Key.showBB), () -> {
+            boolean on = !(Boolean)nurgling.NConfig.get(nurgling.NConfig.Key.showBB);
+            nurgling.NConfig.set(nurgling.NConfig.Key.showBB, on);
+            Utils.setprefb(PlannerView.PREF_BB, on);
+        }), PAD, y);
+        y += bb.sz.y + GAP;
+        ToolButton gw = add(new ToolButton("Grid boundaries", () -> PlannerView.gridwalls, () -> {
+            PlannerView.gridwalls = !PlannerView.gridwalls;
+            Utils.setprefb(PlannerView.PREF_GRIDWALLS, PlannerView.gridwalls);
+        }), PAD, y);
+        gw.settip("Walls on the edges of the game's map grids (100 x 100 tiles), as nurgling draws them");
+        y += gw.sz.y + GAP;
+        int w = Math.max(Math.max(Math.max(v.sz.x, h.sz.x), Math.max(bb.sz.x, gw.sz.x)), hint.sz().x) + PAD * 2;
         resize(Coord.of(w, y + hint.sz().y + PAD));
     }
 

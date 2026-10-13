@@ -52,8 +52,8 @@ public class TerrainPanel extends Widget {
         }
         y += bh + GAP;
         brushy = y;
-        Button minus = add(new Button(UI.scale(28), "-", false, () -> tool.radius = Math.max(0, tool.radius - 1)), PAD, y);
-        add(new Button(UI.scale(28), "+", false, () -> tool.radius = Math.min(25, tool.radius + 1)), PAD + UI.scale(28) + UI.scale(90), y);
+        Button minus = add(new Button(UI.scale(28), "-", false, () -> tool.grow(-1)), PAD, y);
+        add(new Button(UI.scale(28), "+", false, () -> tool.grow(1)), PAD + UI.scale(28) + UI.scale(90), y);
         add(new Button(UI.scale(80), "Done", false, () -> tool.on = false), W - PAD - UI.scale(80), y);
         brushh = minus.sz.y;
         y += brushh + GAP;
@@ -145,7 +145,7 @@ public class TerrainPanel extends Widget {
         g.image(t, Coord.of(PAD, hdry));
         Tex hint = text(hint(), DIM, fnd);
         g.image(hint, Coord.of(sz.x - PAD - hint.sz().x, hdry + (t.sz().y - hint.sz().y) / 2));
-        Tex b = text("Brush " + tool.radius, TXT, fnd);
+        Tex b = text(tool.brushlabel(), TXT, fnd);
         g.image(b, Coord.of(PAD + UI.scale(28) + (UI.scale(90) - b.sz().x) / 2, brushy + (brushh - b.sz().y) / 2));
         g.image(text(String.format("Soil vs. the original ground: dug %d, filled %d units", soil[0], soil[1]), TXT, fnd), Coord.of(PAD, soily));
         super.draw(g);

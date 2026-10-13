@@ -33,6 +33,8 @@ public class TerrainTool {
     public boolean on = false;
     public Mode mode = Mode.RAISE;
     public int radius = 2;
+    /** Paint's own brush: a square this many tiles a side. */
+    public int paintside = 1;
     public String paint = "gfx/tiles/paving/graybrick";
 
     private boolean down = false;
@@ -141,22 +143,55 @@ public class TerrainTool {
             break;
         }
         case PAINT: {
-            Coord t0 = tile(mc);
-            int r = Math.max(radius - 1, 0);
-            for(int y = -r; y <= r; y++)
-                for(int x = -r; x <= r; x++)
-                    if(x * x + y * y <= r * r + r) {
-                        Coord t = t0.add(x, y);
-                        String cur = store.tile(t);
-                        if(cur != null && !cur.equals(paint)) {
-                            touch(t.div(MCache.cmaps));
-                            store.settile(t, paint);
-                        }
-                    }
+            Area sq = paintsquare(mc);
+            for(Coord t : sq) {
+                String cur = store.tile(t);
+                if(cur != null && !cur.equals(paint)) {
+                    touch(t.div(MCache.cmaps));
+                    store.settile(t, paint);
+                }
+            }
             break;
         }
         default:
         }
+    }
+
+    /** Paint brushes are squares of whole tiles: 1x1 at the smallest, then 2x2, 3x3... */
+    public int paintsize() {
+        return(Math.max(paintside, 1));
+    }
+
+    /** Grows (or with a negative d shrinks) the current mode's brush. */
+    public void grow(int d) {
+        if(mode == Mode.PAINT)
+            paintside = Utils.clip(paintside + d, 1, 25);
+        else
+            radius = Utils.clip(radius + d, 0, 25);
+    }
+
+    /** The tiles a paint stroke at mc covers: the square around the tile under the cursor. */
+    private Area paintsquare(Coord2d mc) {
+        int n = paintsize();
+        return(Area.sized(tile(mc).sub((n - 1) / 2, (n - 1) / 2), Coord.of(n, n)));
+    }
+
+    /** Dev: one paint stroke at world point mc, as a click would; returns how many tiles changed. */
+    public int paintat(Coord2d mc) {
+        Mode m = mode;
+        mode = Mode.PAINT;
+        int n = 0;
+        for(Coord t : paintsquare(mc))
+            if(store.tile(t) != null && !store.tile(t).equals(paint))
+                n++;
+        apply(mc);
+        mode = m;
+        return(n);
+    }
+
+    /** What the brush size reads as in the panel. */
+    public String brushlabel() {
+        return((mode == Mode.PAINT) ? "Brush " + paintsize() + " × " + paintsize() : "Brush " + radius);
     }
 
     private void set(Coord v, float z) {
@@ -278,10 +313,10 @@ public class TerrainTool {
     public boolean key(Widget.KeyDownEvent ev) {
         switch(ev.code) {
         case KeyEvent.VK_OPEN_BRACKET:
-            radius = Math.max(0, radius - 1);
+            grow(-1);
             return(true);
         case KeyEvent.VK_CLOSE_BRACKET:
-            radius = Math.min(25, radius + 1);
+            grow(1);
             return(true);
         case KeyEvent.VK_ESCAPE:
             on = false;
@@ -291,6 +326,33 @@ public class TerrainTool {
     }
 
     /* ---------- drawing ---------- */
+
+    /** A tile-aligned square outlined on the ground, following its height along the edges. */
+    private void drawsquare(GOut g, Area sq) {
+        double t = MCache.tilesz.x;
+        Coord[] corners = {sq.ul, Coord.of(sq.br.x, sq.ul.y), sq.br, Coord.of(sq.ul.x, sq.br.y), sq.ul};
+        g.chcolor(NStyle.border);
+        for(int k = 0; k < 4; k++) {
+            Coord a = corners[k], b = corners[k + 1];
+            int steps = Math.max(1, Math.abs(b.x - a.x) + Math.abs(b.y - a.y));
+            Coord prev = null;
+            for(int i = 0; i <= steps; i++) {
+                Coord2d p = Coord2d.of(a.x + (b.x - a.x) * (double)i / steps, a.y + (b.y - a.y) * (double)i / steps).mul(t);
+                Coord s;
+                try {
+                    Coord3f sc = mv.screenxf(Coord3f.of((float)p.x, (float)p.y, (float)mv.glob.map.getcz(p)));
+                    s = Coord.of(Math.round(sc.x), Math.round(sc.y));
+                } catch(Loading l) {
+                    prev = null;
+                    continue;
+                }
+                if(prev != null)
+                    g.line(prev, s, 2);
+                prev = s;
+            }
+        }
+        g.chcolor();
+    }
 
     public void draw(GOut g) {
         if(!on || hovermc == null)
@@ -304,6 +366,10 @@ public class TerrainTool {
             }
             Coord p = mv.ui.mc.sub(mv.rootpos());
             g.image(leveltex, p.add(UI.scale(16), UI.scale(8)));
+            return;
+        }
+        if(mode == Mode.PAINT) {
+            drawsquare(g, paintsquare(hovermc));
             return;
         }
         /* Brush outline on the ground. */

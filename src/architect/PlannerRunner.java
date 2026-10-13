@@ -292,6 +292,7 @@ public class PlannerRunner implements UI.Runner {
         final WallBar wallbar;
         final BlueprintsPanel blueprints;
         final OptionsPanel options;
+        final SelectionBar selbar;
         final RenderAudit audit;
 
         Screen(Coord sz) {
@@ -341,6 +342,12 @@ public class PlannerRunner implements UI.Runner {
             view.blueprints.placed = (p, n) -> msg(String.format("Placed %s (%d objects); Ctrl+Z takes it back", p.name, n));
             blueprints = add(new BlueprintsPanel(view, PlannerRunner.this::msg), 0, 0);
             blueprints.hide();
+            selbar = add(new SelectionBar(view, () -> blueprints.saveselectionkey()), 0, 0);
+            selbar.hide();
+            /* bounding boxes as they were left (nurgling draws them from its own setting) */
+            nurgling.NConfig.set(nurgling.NConfig.Key.showBB, Utils.getprefb(PlannerView.PREF_BB, false) || Boolean.getBoolean("architect.showbb"));
+            if(Boolean.getBoolean("architect.gridwalls"))
+                PlannerView.gridwalls = true;
             options = add(new OptionsPanel(), 0, 0);
             /* dev: -Darchitect.showoptions=true opens it at start (screenshots) */
             options.show(Boolean.getBoolean("architect.showoptions"));
@@ -384,8 +391,8 @@ public class PlannerRunner implements UI.Runner {
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
-                return("Drag a selected object: move all   Shift+click: add/remove   R: turn   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Ctrl+B: save as blueprint   Esc: deselect");
-            return("Click: select   Shift+click: add   Drag on ground: box select   Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down");
+                return("Drag a selected object: move all   Shift+click: add/remove   R: turn   F / Shift+F: mirror   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Esc: deselect");
+            return("Click: select   Shift+click: add   Drag on ground: box select   Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down   Ctrl+B: bounding boxes");
         }
 
         void layout() {
@@ -404,6 +411,7 @@ public class PlannerRunner implements UI.Runner {
         private double bpdemo = 0, areademo = 0;
         private EditCheck editcheck = null;
         private AreaCheck areacheck = null;
+        private FeatureCheck featurecheck = null;
         private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
@@ -429,6 +437,10 @@ public class PlannerRunner implements UI.Runner {
             }
             if(!planning && blueprints.visible)
                 blueprints.hide();
+            boolean bar = planning && !view.sel.isEmpty() && view.placing() == null && !view.areas.on && !(view.terrain != null && view.terrain.on);
+            if(selbar.visible != bar)
+                selbar.show(bar);
+            selbar.c = Coord.of((sz.x - selbar.sz.x) / 2, sz.y - StatusBar.H - selbar.sz.y - UI.scale(8));
             if(options.visible && toolbar.options != null)
                 options.c = Coord.of(Math.min(toolbar.options.c.x, sz.x - options.sz.x - UI.scale(4)), toolbar.sz.y + UI.scale(4));
             blueprints.c = Coord.of(Math.max(0, sz.x - LayersPanel.W - blueprints.sz.x - UI.scale(8)), toolbar.sz.y + UI.scale(8));
@@ -475,6 +487,10 @@ public class PlannerRunner implements UI.Runner {
                         areaspanel.demopicker(ad);
                 }
             }
+            if(featurecheck == null && Boolean.getBoolean("architect.featurecheck"))
+                featurecheck = new FeatureCheck(view);
+            if(featurecheck != null)
+                featurecheck.tick();
             if(areacheck == null && Boolean.getBoolean("architect.areacheck"))
                 areacheck = new AreaCheck(view);
             if(areacheck != null)
@@ -535,10 +551,6 @@ public class PlannerRunner implements UI.Runner {
         }
 
         public boolean keydown(KeyDownEvent ev) {
-            if(ev.code == java.awt.event.KeyEvent.VK_B && (ev.mods & KeyMatch.C) != 0 && !view.play.on) {
-                blueprints.saveselectionkey();
-                return(true);
-            }
             if(ev.code == java.awt.event.KeyEvent.VK_S && (ev.mods & KeyMatch.C) != 0) {
                 if(save())
                     msg("Saved");
