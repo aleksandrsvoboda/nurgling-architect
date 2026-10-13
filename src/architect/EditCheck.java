@@ -22,8 +22,46 @@ class EditCheck {
         this.mv = mv;
     }
 
+    /* Camera check (-Darchitect.camcheck=true): a right-drag right and down with each inversion setting. */
+    private int cstep = 0;
+    private float[][] turned = new float[4][];
+
+    private void camdrag(int dx, int dy) {
+        Coord c = mv.sz.div(2);
+        mv.mousedown(new Widget.MouseDownEvent(c, 3));
+        mv.mousemove(new Widget.MouseMoveEvent(c.add(dx, dy)));
+        mv.mouseup(new Widget.MouseUpEvent(c.add(dx, dy), 3));
+    }
+
+    boolean camtick() {
+        if(!Boolean.getBoolean("architect.camcheck"))
+            return(false);
+        if(!(mv.camera instanceof PlannerView.OrbitCam) || cstep >= 4) {
+            if(cstep == 4) {
+                System.out.println(String.format("[camcheck] normal: turn %+.2f tilt %+.2f | invert X: turn %+.2f tilt %+.2f | invert Y: turn %+.2f tilt %+.2f | both: turn %+.2f tilt %+.2f",
+                                                 turned[0][0], turned[0][1], turned[1][0], turned[1][1], turned[2][0], turned[2][1], turned[3][0], turned[3][1]));
+                PlannerView.invertx = PlannerView.inverty = false;
+                cstep++;
+            }
+            return(true);
+        }
+        PlannerView.OrbitCam cam = (PlannerView.OrbitCam)mv.camera;
+        PlannerView.invertx = (cstep & 1) != 0;
+        PlannerView.inverty = (cstep & 2) != 0;
+        float a = cam.heading(), e = cam.tilt();
+        camdrag(30, 30);
+        turned[cstep] = new float[] {cam.heading() - a, cam.tilt() - e};
+        camdrag(-30, -30);
+        cstep++;
+        return(true);
+    }
+
     void tick() {
         double now = Utils.rtime();
+        if(t0 < 0)
+            t0 = now + 10;
+        if(now > t0 && camtick())
+            return;
         if(t0 < 0)
             t0 = now + 10;
         if(now < t0)

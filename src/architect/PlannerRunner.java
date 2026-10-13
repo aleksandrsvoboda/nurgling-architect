@@ -184,6 +184,18 @@ public class PlannerRunner implements UI.Runner {
         }
     }
 
+    void toggleOptions() {
+        Screen scr = screen;
+        if(scr == null)
+            return;
+        if(scr.options.visible) {
+            scr.options.hide();
+        } else {
+            scr.options.show();
+            scr.options.raise();
+        }
+    }
+
     void toggleBlueprints() {
         Screen scr = screen;
         if(scr == null)
@@ -231,7 +243,7 @@ public class PlannerRunner implements UI.Runner {
         final Text.Foundry fnd = new Text.Foundry(Text.sans.deriveFont(java.awt.Font.BOLD), 14).aa(true);
         final Tex title;
         final List<Integer> seps = new ArrayList<>();
-        final ToolButton close;
+        final ToolButton close, options;
 
         Toolbar(int w) {
             super(Coord.of(w, 10));
@@ -260,6 +272,7 @@ public class PlannerRunner implements UI.Runner {
                 x += UI.scale(GROUP) - UI.scale(GAP);
             }
             close = add(new ToolButton("Close plan", PlannerRunner.this::close), 0, y);
+            options = add(new ToolButton("Options", () -> (screen != null) && screen.options.visible, PlannerRunner.this::toggleOptions), 0, y);
             resize(Coord.of(w, h + UI.scale(PAD) * 2));
         }
 
@@ -267,6 +280,8 @@ public class PlannerRunner implements UI.Runner {
             super.resize(sz);
             if(close != null)
                 close.c = Coord.of(sz.x - close.sz.x - UI.scale(10), close.c.y);
+            if(options != null)
+                options.c = Coord.of(close.c.x - options.sz.x - UI.scale(GROUP), close.c.y);
         }
 
         public void draw(GOut g) {
@@ -295,6 +310,7 @@ public class PlannerRunner implements UI.Runner {
         final TerrainPanel terrainpanel;
         final WallBar wallbar;
         final BlueprintsPanel blueprints;
+        final OptionsPanel options;
         final RenderAudit audit;
 
         Screen(Coord sz) {
@@ -331,6 +347,9 @@ public class PlannerRunner implements UI.Runner {
             view.blueprints.placed = (p, n) -> msg(String.format("Placed %s (%d objects); Ctrl+Z takes it back", p.name, n));
             blueprints = add(new BlueprintsPanel(view, PlannerRunner.this::msg), 0, 0);
             blueprints.hide();
+            options = add(new OptionsPanel(), 0, 0);
+            /* dev: -Darchitect.showoptions=true opens it at start (screenshots) */
+            options.show(Boolean.getBoolean("architect.showoptions"));
         }
 
         int sideh() {
@@ -408,6 +427,8 @@ public class PlannerRunner implements UI.Runner {
             }
             if(!planning && blueprints.visible)
                 blueprints.hide();
+            if(options.visible && toolbar.options != null)
+                options.c = Coord.of(Math.min(toolbar.options.c.x, sz.x - options.sz.x - UI.scale(4)), toolbar.sz.y + UI.scale(4));
             blueprints.c = Coord.of(Math.max(0, sz.x - LayersPanel.W - blueprints.sz.x - UI.scale(8)), toolbar.sz.y + UI.scale(8));
             if(layers.visible != planning) {
                 layers.show(planning);
@@ -426,7 +447,7 @@ public class PlannerRunner implements UI.Runner {
             Catalogue cat = catalogue;
             if(audit != null)
                 audit.tick(cat);
-            if(editcheck == null && Boolean.getBoolean("architect.editcheck"))
+            if(editcheck == null && (Boolean.getBoolean("architect.editcheck") || Boolean.getBoolean("architect.camcheck")))
                 editcheck = new EditCheck(view);
             if(editcheck != null)
                 editcheck.tick();

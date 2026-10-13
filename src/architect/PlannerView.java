@@ -41,6 +41,9 @@ public class PlannerView extends MapView {
     public final BlueprintTool blueprints;
     /** Short messages for the status bar (set by the runner). */
     public java.util.function.Consumer<String> onmsg = s -> {};
+    public static final String PREF_INVERTX = "camera-invert-x", PREF_INVERTY = "camera-invert-y";
+    /** Options: reverse the planning cameras' drag (not play mode's). */
+    public static boolean invertx = Utils.getprefb(PREF_INVERTX, false), inverty = Utils.getprefb(PREF_INVERTY, false);
     public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 4;
     /** Grass and flowers (flavour objects) only this many cuts around the camera; bare ground reaches further. */
     public static final int FLAVVIEW = 3;
@@ -115,6 +118,9 @@ public class PlannerView extends MapView {
         }
 
         public float angle() {return(angl);}
+        /** Tilt the camera is heading to (dev checks). */
+        public float tilt() {return(telev);}
+        public float heading() {return(tangl);}
         public float dist() {return(dist);}
 
         public void turn(float d) {tangl += d;}
@@ -630,7 +636,13 @@ public class PlannerView extends MapView {
     public void mousemove(MouseMoveEvent ev) {
         if(drag != null) {
             if(camdrag) {
-                camera.drag(ev.c);
+                Coord c = ev.c;
+                if(!play.on) {
+                    /* the cameras read the drag relative to where it began; flip that offset per option */
+                    Coord d = c.sub(dragstart);
+                    c = dragstart.add(invertx ? -d.x : d.x, inverty ? -d.y : d.y);
+                }
+                camera.drag(c);
             } else {
                 Coord d = ev.c.sub(dragc);
                 dragc = ev.c;
