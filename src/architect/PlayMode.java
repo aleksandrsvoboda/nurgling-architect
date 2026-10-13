@@ -122,7 +122,8 @@ public class PlayMode {
         pose = null;
         prevcam = mv.camera;
         prevcc = mv.cc;
-        mv.camera = mv.new SOrthoCam();
+        /* nurgling's ortho camera: the game view, but free rotation (SOrthoCam snaps to 90 degrees on release). */
+        mv.camera = mv.new NOrthoCam();
         mv.cc = at;
         Glob glob = mv.glob;
         glob.loader.defer(() -> {
