@@ -26,6 +26,13 @@ public class Main {
         }
         Client cl = new Client(Toolkit.instance());
         cl.wnd.title("Nurgling Architect " + ArchitectEnv.VERSION);
+        /* The planner's own icon (the same as in the updater's Apps panel), not the game client's */
+        try(java.io.InputStream icon = Main.class.getResourceAsStream("icon.png")) {
+            if(icon != null)
+                cl.wnd.icon(javax.imageio.ImageIO.read(icon));
+        } catch(java.io.IOException e) {
+            System.err.println("[architect] no window icon: " + e);
+        }
         try {
             cl.run(first);
         } finally {
