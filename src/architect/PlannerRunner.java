@@ -295,6 +295,7 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
+        private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
         private boolean autoplayed = false;
@@ -334,6 +335,19 @@ public class PlannerRunner implements UI.Runner {
                 System.out.println("[play] autostop");
                 view.play.stop();
                 System.out.println("[play] stopped");
+            }
+            /* Dev: -Darchitect.fpslog=1 prints the frame rate every second; nopanels / ortho isolate their cost. */
+            if(Boolean.getBoolean("architect.fpslog") && Utils.rtime() - lastfpslog > 1) {
+                lastfpslog = Utils.rtime();
+                System.out.println("[fps] " + nurgling.NUtils.getFps());
+                if(Boolean.getBoolean("architect.nopanels") && layers.visible) {
+                    layers.hide();
+                    if(panel != null) panel.hide();
+                    status.hide();
+                    toolbar.hide();
+                }
+                if(Boolean.getBoolean("architect.ortho") && !(view.camera instanceof MapView.SOrthoCam))
+                    view.camera = view.new SOrthoCam();
             }
             if(autoplay > 0 && !autoplayed && Utils.rtime() > autoplay) {
                 autoplayed = true;
