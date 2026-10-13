@@ -253,7 +253,7 @@ public class PlayMode {
             st.v = moved;
         if(Boolean.getBoolean("architect.debugplay") && (Utils.rtime() - lastdebug) > 0.5) {
             lastdebug = Utils.rtime();
-            System.out.printf("[play] pos %s v %.1f pose %s%n", pos, moved, pose);
+            System.out.printf("[play] pos %s v %.1f pose %s speed %d%n", pos, moved, pose, speed);
         }
         Gob g = gob;
         if(g != null)

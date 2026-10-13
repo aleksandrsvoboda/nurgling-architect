@@ -221,6 +221,7 @@ public class PlannerRunner implements UI.Runner {
         final LayersPanel layers;
         CataloguePanel panel = null;
         final AreaPanel areapanel;
+        final Speedget speeds;
         final TerrainPanel terrainpanel;
 
         Screen(Coord sz) {
@@ -232,6 +233,18 @@ public class PlannerRunner implements UI.Runner {
             layers = add(new LayersPanel(plan, view.sel, sideh()), sz.x - LayersPanel.W, toolbar.sz.y);
             areapanel = add(new AreaPanel(view.areas, PlannerRunner.this::exportareas), (sz.x - AreaPanel.W) / 2, toolbar.sz.y + UI.scale(8));
             areapanel.hide();
+            /* The game's own speed switcher (crawl/walk/run/sprint), driving play mode instead of the server. */
+            speeds = add(new Speedget(view.play.speed, 3) {
+                public void set(int s) {
+                    view.play.speed = s;
+                }
+
+                public void tick(double dt) {
+                    cur = view.play.speed;
+                    super.tick(dt);
+                }
+            });
+            speeds.hide();
             view.terrain = new TerrainTool(view, terrain, transport);
             terrainpanel = add(new TerrainPanel(view.terrain, terrain, () -> catalogue), (sz.x - TerrainPanel.W) / 2, toolbar.sz.y + UI.scale(8));
             terrainpanel.hide();
@@ -275,6 +288,7 @@ public class PlannerRunner implements UI.Runner {
             status.c = Coord.of(0, sz.y - StatusBar.H);
             status.resize(Coord.of(sz.x, StatusBar.H));
             layers.c = Coord.of(sz.x - LayersPanel.W, toolbar.sz.y);
+            speeds.c = Coord.of(sz.x - speeds.sz.x - UI.scale(12), toolbar.sz.y + UI.scale(10));
             layers.resize(Coord.of(LayersPanel.W, sideh()));
             if(panel != null)
                 panel.resize(Coord.of(CataloguePanel.W, sideh()));
@@ -296,6 +310,10 @@ public class PlannerRunner implements UI.Runner {
             }
             /* Play mode is just you and the world: the planning panels step aside. */
             boolean planning = !view.play.on;
+            if(speeds.visible == planning) {
+                speeds.show(!planning);
+                speeds.c = Coord.of(sz.x - speeds.sz.x - UI.scale(12), toolbar.sz.y + UI.scale(10));
+            }
             if(layers.visible != planning) {
                 layers.show(planning);
                 if(panel != null)
