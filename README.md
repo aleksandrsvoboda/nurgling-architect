@@ -1,9 +1,9 @@
 # Nurgling Architect
 
-An offline 3D base planner for Haven & Hearth, built on the nurgling client engine. It never connects to the game server or the internet. Object models and ground textures come from your local game cache, which the planner opens read-only.
+An offline 3D base planner for Haven & Hearth, built on the nurgling client engine. It never connects to the game server or the internet, and it runs without the game installed. Object models and ground textures ship with it in `pack/`.
 
 You plan on a **generated world** (from a seed, in one of five styles) or a **flat sandbox**:
-- place any object you have seen in game, from the build menu or the full object list;
+- place any of about 1,850 game objects, from the build menu or the full object list;
 - edit with layers, undo/redo, copy/paste, rows and arrays, and collision checks;
 - plan nurgling areas and export them as an area preset;
 - reshape and pave the ground; this is visual only.

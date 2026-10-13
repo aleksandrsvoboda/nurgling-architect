@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 
 /**
  * Left-hand object browser: the game's build menu, or every object, with search. Clicking an entry starts
- * placing it. Entries without a model offline (never seen in game) are listed greyed out.
+ * placing it. Entries without a model in the pack are listed greyed out.
  */
 public class CataloguePanel extends Widget {
     public static final int W = UI.scale(270), ROWH = UI.scale(26), ICON = UI.scale(22);
