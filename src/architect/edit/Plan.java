@@ -492,6 +492,9 @@ public class Plan {
             }
             /* Unique (virtual) ids: OCache keys objects by id; with a shared id it ticks and removes only one. */
             Gob g = glob.oc.new Virtual(o.rc, o.a);
+            /* ...but clickable: the engine leaves virtual objects out of the click buffer, which made every
+             * planned object impossible to select or drag. */
+            g.virtual = false;
             ResDrawable d = Looks.drawable(g, res.get(), o.sdt);
             if(d == null)
                 return;

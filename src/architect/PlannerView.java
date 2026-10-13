@@ -209,6 +209,26 @@ public class PlannerView extends MapView {
         return(ret);
     }
 
+    private double warmat = -1;
+
+    /*
+     * The engine builds its click buffer on the first hit test and answers that one from an empty buffer, so
+     * the first click on a planned object would select nothing. One throwaway test shortly after opening fills it.
+     */
+    private void warmclicks() {
+        if(warmat == 0)
+            return;
+        if(warmat < 0)
+            warmat = Utils.rtime() + 2;
+        if(Utils.rtime() < warmat)
+            return;
+        warmat = 0;
+        new Hittest(sz.div(2)) {
+            protected void hit(Coord pc, Coord2d mc, ClickData inf) {}
+            protected void nohit(Coord pc) {}
+        }.run();
+    }
+
     public void toast(String s) {
         onmsg.accept(s);
     }
@@ -507,6 +527,7 @@ public class PlannerView extends MapView {
             keypan(dt);
         plan.tick();
         blueprints.tick();
+        warmclicks();
         if(terrain != null)
             terrain.tick();
         collisions.tick();

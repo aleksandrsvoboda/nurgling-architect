@@ -367,8 +367,8 @@ public class PlannerRunner implements UI.Runner {
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
-                return("Drag: move   R: turn   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Esc: deselect");
-            return("Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down   Click/drag: select");
+                return("Drag a selected object: move all   Shift+click: add/remove   R: turn   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Ctrl+B: save as blueprint   Esc: deselect");
+            return("Click: select   Shift+click: add   Drag on ground: box select   Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down");
         }
 
         void layout() {
@@ -385,6 +385,7 @@ public class PlannerRunner implements UI.Runner {
 
         private double lastsave = Utils.rtime();
         private double bpdemo = 0;
+        private EditCheck editcheck = null;
         private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
@@ -425,6 +426,10 @@ public class PlannerRunner implements UI.Runner {
             Catalogue cat = catalogue;
             if(audit != null)
                 audit.tick(cat);
+            if(editcheck == null && Boolean.getBoolean("architect.editcheck"))
+                editcheck = new EditCheck(view);
+            if(editcheck != null)
+                editcheck.tick();
             /* Dev: -Darchitect.bpdemo=File.json stamps that blueprint at the view centre a few seconds in, places
              * it after a few more (for screenshots without touching the mouse). */
             String demo = System.getProperty("architect.bpdemo");
