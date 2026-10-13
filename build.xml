@@ -34,9 +34,6 @@
         <include name="lwjgl-fat.jar"/>
         <include name="lwjgl-awt.jar"/>
         <include name="lwjgl-opengl-fat.jar"/>
-        <include name="lwjgl-vulkan-*.jar"/>
-        <include name="lwjgl-shaderc-*.jar"/>
-        <include name="lwjgl-vma-*.jar"/>
         <exclude name="*-natives-linux*.jar"/>
         <exclude name="*-natives-macos*.jar"/>
       </fileset>

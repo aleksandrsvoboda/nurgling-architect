@@ -25,6 +25,31 @@ public class TestAll {
         }
     }
 
+    /* Everything the tests make on disk goes here and is deleted at the end. */
+    static final List<Path> temps = new ArrayList<>();
+
+    static Path tmpdir(String prefix) throws java.io.IOException {
+        Path p = Files.createTempDirectory(prefix);
+        temps.add(p);
+        return(p);
+    }
+
+    static Path tmpfile(String prefix, String suffix) throws java.io.IOException {
+        Path p = Files.createTempFile(prefix, suffix);
+        temps.add(p);
+        return(p);
+    }
+
+    static void cleanup() {
+        for(Path p : temps) {
+            try(java.util.stream.Stream<Path> s = Files.walk(p)) {
+                s.sorted(Comparator.reverseOrder()).forEach(f -> f.toFile().delete());
+            } catch(java.io.IOException e) {
+                System.out.println("could not remove " + p);
+            }
+        }
+    }
+
     static Session session() {
         return(new Session(new LocalWorldTransport(new SandboxWorld(1, 1, "gfx/tiles/grass"), new GridEncoder(new GridEncoder.TileRegistry(null))),
                            new Session.User("test")));
@@ -90,7 +115,7 @@ public class TestAll {
         l2.locked = true;
         plan.add(new PlanObject("p1", "gfx/terobjs/cupboard", new byte[] {9}, Coord2d.of(12.5, 33.25), 0.75, l2.id));
         plan.putarea(PlanArea.simple("Farm", new java.awt.Color(1, 2, 3, 56), Area.sized(Coord.of(-4, 6), Coord.of(5, 2)), null));
-        Path tmp = Files.createTempFile("plan", PlanFile.EXT);
+        Path tmp = tmpfile("plan", PlanFile.EXT);
         PlanFile.save(tmp, "T", new SandboxWorld(10, 10, "gfx/tiles/grass"), plan, Coord2d.of(100, 200));
         PlanFile.Data d = PlanFile.load(tmp);
         check(d.name.equals("T") && d.camera.equals(Coord2d.of(100, 200)), "plan header");
@@ -125,7 +150,7 @@ public class TestAll {
         check("gfx/tiles/paving/graybrick".equals(t.tile(Coord.of(10, 10))) && "gfx/tiles/grass".equals(t.tile(Coord.of(11, 10))), "paint one tile");
         GridData g = t.grid(Coord.of(0, 0));
         check(g.tilesets[g.tiles[10 + 10 * 100]].equals("gfx/tiles/paving/graybrick"), "painted tile served");
-        Path tmp = Files.createTempFile("terrain", TerrainStore.EXT);
+        Path tmp = tmpfile("terrain", TerrainStore.EXT);
         t.write(tmp);
         TerrainStore r = new TerrainStore(new SandboxWorld(2, 2, "gfx/tiles/grass"));
         r.read(tmp);
@@ -197,7 +222,7 @@ public class TestAll {
         Blueprints.Preset again = Blueprints.parse(p.json());
         check(again.json().similar(p.json()), "written back unchanged");
 
-        Path dir = Files.createTempDirectory("bp");
+        Path dir = tmpdir("bp");
         Blueprints.Preset imp = Blueprints.importFile(dir, game);
         check(imp.file.equals("Layer_01.json") && Files.exists(dir.resolve("Layer_01.json")), "import names the file like the game");
         org.json.JSONObject withextra = new org.json.JSONObject(new String(Files.readAllBytes(dir.resolve(imp.file)), "UTF-8"));
@@ -267,7 +292,7 @@ public class TestAll {
 
     public static void main(String[] args) throws Exception {
         /* Same isolated setup as the app, in a throwaway home: engine code reads nurgling config. */
-        System.setProperty("architect.home", Files.createTempDirectory("architect-test").toString());
+        System.setProperty("architect.home", tmpdir("architect-test").toString());
         ArchitectEnv.init();
         gridRoundTrip();
         undoRedo();
@@ -278,6 +303,7 @@ public class TestAll {
         catalogue();
         blueprints();
         System.out.println(passes + " passed, " + fails + " failed");
+        cleanup();
         System.exit(fails == 0 ? 0 : 1);
     }
 }
