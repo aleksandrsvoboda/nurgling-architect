@@ -293,6 +293,7 @@ public class PlannerRunner implements UI.Runner {
         final BlueprintsPanel blueprints;
         final OptionsPanel options;
         final SelectionBar selbar;
+        final Compass compass;
         final RenderAudit audit;
 
         Screen(Coord sz) {
@@ -342,6 +343,7 @@ public class PlannerRunner implements UI.Runner {
             view.blueprints.placed = (p, n) -> msg(String.format("Placed %s (%d objects); Ctrl+Z takes it back", p.name, n));
             blueprints = add(new BlueprintsPanel(view, PlannerRunner.this::msg), 0, 0);
             blueprints.hide();
+            compass = add(new Compass(view), 0, 0);
             selbar = add(new SelectionBar(view, () -> blueprints.saveselectionkey()), 0, 0);
             selbar.hide();
             /* bounding boxes as they were left (nurgling draws them from its own setting) */
@@ -408,7 +410,7 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
-        private double bpdemo = 0, areademo = 0;
+        private double bpdemo = 0, areademo = 0, northup = 0;
         private EditCheck editcheck = null;
         private AreaCheck areacheck = null;
         private FeatureCheck featurecheck = null;
@@ -438,6 +440,9 @@ public class PlannerRunner implements UI.Runner {
             }
             if(!planning && blueprints.visible)
                 blueprints.hide();
+            /* the compass in the view's top-right corner, below the speed switcher in play mode */
+            compass.c = Coord.of(sz.x - (planning ? LayersPanel.W : 0) - Compass.SZ - UI.scale(10),
+                                 toolbar.sz.y + UI.scale(10) + (planning ? 0 : speeds.sz.y + UI.scale(8)));
             boolean bar = planning && !view.sel.isEmpty() && view.placing() == null && !view.areas.on && !(view.terrain != null && view.terrain.on);
             if(selbar.visible != bar)
                 selbar.show(bar);
@@ -487,6 +492,13 @@ public class PlannerRunner implements UI.Runner {
                     if(!ad.equals("step"))
                         areaspanel.demopicker(ad);
                 }
+            }
+            /* Dev: -Darchitect.northup=true turns north-up a few seconds in (screenshots) */
+            if(Boolean.getBoolean("architect.northup") && northup == 0)
+                northup = Utils.rtime() + 8;
+            if(northup > 0 && Utils.rtime() > northup) {
+                northup = -1;
+                view.northup();
             }
             if(realsnap == null && Boolean.getBoolean("architect.realsnap"))
                 realsnap = new RealSnapCheck(view);

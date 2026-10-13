@@ -129,6 +129,12 @@ public class PlannerView extends MapView {
 
         public void turn(float d) {tangl += d;}
 
+        /** Turns to look along heading a, the short way round. */
+        public void face(double a) {
+            double d = Math.IEEEremainder(a - tangl, Math.PI * 2);
+            tangl += (float)d;
+        }
+
         public boolean click(Coord c) {
             elevorig = telev;
             anglorig = tangl;
@@ -282,6 +288,14 @@ public class PlannerView extends MapView {
             protected void hit(Coord pc, Coord2d mc, ClickData inf) {}
             protected void nohit(Coord pc) {}
         }.run();
+    }
+
+    /** North up on screen, as on the game's map: the camera looks along -y, i.e. heading -pi/2 (see forward()). */
+    public void northup() {
+        if(camera instanceof OrbitCam)
+            ((OrbitCam)camera).face(-Math.PI / 2);
+        else
+            toast("North-up works in the orbit camera (Tab switches back)");
     }
 
     public void toast(String s) {
