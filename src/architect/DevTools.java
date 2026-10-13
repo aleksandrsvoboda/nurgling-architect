@@ -39,6 +39,43 @@ public class DevTools {
                     c.merge(l.getClass().getSimpleName(), 1, Integer::sum);
                 System.out.println(args[i] + ": " + c);
             }
+        } else if(cmd.equals("shape")) {
+            /* obstacle polygons and model bounds, for working out how pieces join */
+            for(int i = 1; i < args.length; i++) {
+                haven.Resource r = haven.Resource.remote().loadwait(args[i]);
+                StringBuilder sb = new StringBuilder(args[i] + "\n");
+                for(haven.Resource.Obstacle o : r.layers(haven.Resource.Obstacle.class))
+                    for(haven.Coord2d[] p : o.p)
+                        sb.append("  obst ").append(java.util.Arrays.toString(p)).append("\n");
+                float[] mn = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE}, mx = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+                for(haven.VertexBuf.VertexRes v : r.layers(haven.VertexBuf.VertexRes.class)) {
+                    for(haven.VertexBuf.AttribData a : v.b.bufs) {
+                        if(!(a instanceof haven.VertexBuf.VertexData))
+                            continue;
+                        java.nio.FloatBuffer fb = ((haven.VertexBuf.VertexData)a).data;
+                        for(int j = 0; j + 2 < fb.capacity(); j += 3)
+                            for(int k = 0; k < 3; k++) {
+                                mn[k] = Math.min(mn[k], fb.get(j + k));
+                                mx[k] = Math.max(mx[k], fb.get(j + k));
+                            }
+                    }
+                }
+                for(haven.FastMesh.MeshRes m : r.layers(haven.FastMesh.MeshRes.class)) {
+                    float lo = Float.MAX_VALUE, hi = -Float.MAX_VALUE;
+                    haven.VertexBuf.VertexData vd = null;
+                    for(haven.VertexBuf.VertexRes v : r.layers(haven.VertexBuf.VertexRes.class))
+                        for(haven.VertexBuf.AttribData a : v.b.bufs)
+                            if(a instanceof haven.VertexBuf.VertexData) vd = (haven.VertexBuf.VertexData)a;
+                    java.nio.ShortBuffer ib = m.m.indb;
+                    for(int j = 0; vd != null && j < ib.capacity(); j++) {
+                        float y = vd.data.get((ib.get(j) & 0xffff) * 3 + 1);
+                        lo = Math.min(lo, y); hi = Math.max(hi, y);
+                    }
+                    sb.append(String.format("  mesh id=%d info=%s y %.1f..%.1f tris=%d%n", m.id, m.info, lo, hi, ib.capacity() / 3));
+                }
+                sb.append(String.format("  model x %.1f..%.1f y %.1f..%.1f z %.1f..%.1f%n", mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]));
+                System.out.print(sb);
+            }
         } else if(cmd.equals("probe")) {
             byte[] b = new CatalogueIndexer(null, null, ArchitectEnv.RESURL, System.out::println).fetch(args[1]);
             ResFile f = (b == null) ? null : ResFile.parse(b);

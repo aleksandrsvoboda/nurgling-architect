@@ -50,8 +50,25 @@ public class Catalogue {
 
     public Catalogue(List<Entry> build, List<Entry> objects, List<Entry> tiles) {
         this.build = build;
-        this.objects = objects;
+        this.objects = wallnames(objects);
         this.tiles = tiles;
+    }
+
+    /** Wall and fence pieces get proper names ("Palisade Gate", not "Palisadegate"), and every piece is
+     *  listed even when the indexer never saw it (the brick wall's sections and gates). */
+    private static List<Entry> wallnames(List<Entry> objects) {
+        Map<String, String> names = architect.edit.Walls.names();
+        List<Entry> ret = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for(Entry e : objects) {
+            String n = names.get(e.res);
+            ret.add((n == null) ? e : new Entry(e.res, n, e.category, e.pagina));
+            seen.add(e.res);
+        }
+        for(Map.Entry<String, String> n : names.entrySet())
+            if(!seen.contains(n.getKey()))
+                ret.add(new Entry(n.getKey(), n.getValue(), "arch", null));
+        return(ret);
     }
 
     public List<Entry> search(List<Entry> from, String query) {

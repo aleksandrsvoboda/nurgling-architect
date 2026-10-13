@@ -134,6 +134,46 @@ public class TestAll {
         Files.deleteIfExists(tmp);
     }
 
+    static long count(Plan plan, Walls.Kit k, Walls.Piece p) {
+        return(plan.objects().stream().filter(o -> o.res.equals(k.res(p))).count());
+    }
+
+    /** Walls lay like the game's: posts at the ends, a section per tile between, any of eight directions. */
+    static void walls() {
+        Plan plan = new Plan(session().glob);
+        Walls.Kit k = Walls.kit("gfx/terobjs/arch/palisadecp");
+        check(k != null && k.name.equals("Palisade") && Walls.kit("gfx/terobjs/arch/brickbiggate") != null, "kits found");
+        Coord a = Coord.of(2, 2);
+        /* east, 5 tiles: posts on (2,2) and (7,2), sections between */
+        Walls.apply(plan, Walls.run(plan, k, a, Walls.centre(Coord.of(7, 2)).add(2, 3)), "Wall");
+        check(count(plan, k, Walls.Piece.POST) == 2 && count(plan, k, Walls.Piece.SECTION) == 4, "straight run: 2 posts, 4 sections");
+        boolean along = plan.objects().stream().filter(o -> o.res.equals(k.res(Walls.Piece.SECTION)))
+            .allMatch(o -> Math.abs(Math.cos(o.a)) < 1e-9 && o.rc.y == Walls.centre(a).y);
+        check(along, "sections run east on the row's tile centres");
+        /* diagonal from (7,2) to (10,5): 1 new post, 2 sections turned 45 degrees */
+        Walls.apply(plan, Walls.run(plan, k, Coord.of(7, 2), Walls.centre(Coord.of(10, 5))), "Wall");
+        check(count(plan, k, Walls.Piece.POST) == 3 && count(plan, k, Walls.Piece.SECTION) == 6, "diagonal run reuses the corner post");
+        check(plan.objects().stream().anyMatch(o -> o.rc.equals(Walls.centre(Coord.of(8, 3))) && Math.abs(Math.abs(o.a) - Math.PI / 4) < 1e-9), "diagonal section at 45 degrees");
+        /* a wall crossing the first one makes a joint post instead of stacking */
+        Walls.apply(plan, Walls.run(plan, k, Coord.of(4, 0), Walls.centre(Coord.of(4, 4))), "Wall");
+        check(plan.objects().stream().filter(o -> Walls.tile(o.rc).equals(Coord.of(4, 2))).count() == 1
+              && plan.objects().stream().anyMatch(o -> Walls.tile(o.rc).equals(Coord.of(4, 2)) && o.res.equals(k.res(Walls.Piece.POST))), "crossing becomes one post");
+        /* a gate dropped onto the sections at (6,2): sections 5,6 go, posts at 4 (there) and 7 (there) */
+        Walls.Layout g = Walls.gateinto(plan, k, Walls.Piece.GATE, Walls.centre(Coord.of(6, 2)).add(-2, 0));
+        check(g != null, "gate fits into the wall");
+        if(g != null) {
+            Walls.apply(plan, g, "Gate");
+            PlanObject gate = plan.objects().stream().filter(o -> o.res.equals(k.res(Walls.Piece.GATE))).findFirst().orElse(null);
+            check(gate != null && gate.rc.equals(Coord2d.of(6 * 11, 2.5 * 11)), "gate centred between tiles 5 and 6");
+            check(plan.objects().stream().noneMatch(o -> o.res.equals(k.res(Walls.Piece.SECTION)) && (Walls.tile(o.rc).equals(Coord.of(5, 2)) || Walls.tile(o.rc).equals(Coord.of(6, 2)))), "gate replaced its sections");
+            plan.undo();
+            check(count(plan, k, Walls.Piece.GATE) == 0 && count(plan, k, Walls.Piece.SECTION) == 7, "gate undone in one step");
+        }
+        check(Walls.gateinto(plan, k, Walls.Piece.BIGGATE, Walls.centre(Coord.of(3, 2))) == null, "big gate needs three sections");
+        Walls.Layout lead = Walls.gatefrom(plan, k, Walls.Piece.BIGGATE, Coord.of(2, 2), Walls.centre(Coord.of(2, 8)));
+        check(lead != null && lead.add.stream().anyMatch(o -> o.res.equals(k.res(Walls.Piece.POST)) && Walls.tile(o.rc).equals(Coord.of(2, 6))), "big gate off a post: second post 4 tiles on");
+    }
+
     public static void main(String[] args) throws Exception {
         /* Same isolated setup as the app, in a throwaway home: engine code reads nurgling config. */
         System.setProperty("architect.home", Files.createTempDirectory("architect-test").toString());
@@ -143,6 +183,7 @@ public class TestAll {
         planFile();
         overlap();
         terrain();
+        walls();
         System.out.println(passes + " passed, " + fails + " failed");
         System.exit(fails == 0 ? 0 : 1);
     }

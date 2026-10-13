@@ -277,6 +277,7 @@ public class PlannerRunner implements UI.Runner {
         final AreaPanel areapanel;
         final Speedget speeds;
         final TerrainPanel terrainpanel;
+        final WallBar wallbar;
 
         Screen(Coord sz) {
             super(sz);
@@ -302,6 +303,11 @@ public class PlannerRunner implements UI.Runner {
             view.terrain = new TerrainTool(view, terrain, transport);
             terrainpanel = add(new TerrainPanel(view.terrain, terrain, () -> catalogue), (sz.x - TerrainPanel.W) / 2, toolbar.sz.y + UI.scale(8));
             terrainpanel.hide();
+            wallbar = add(new WallBar(view::placing, r -> {
+                view.place(r);
+                setfocus(view);
+            }), 0, 0);
+            wallbar.hide();
         }
 
         int sideh() {
@@ -329,6 +335,8 @@ public class PlannerRunner implements UI.Runner {
                 return(progress);
             if(view.play.on)
                 return("Play mode   Click: walk there   WASD: move   1-4: crawl/walk/run/sprint   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back");
+            if(architect.edit.Walls.kit(view.placing()) != null)
+                return("Drag from a post: wall (8 directions)   Click: post / gate   Crossing a wall joins it   Ctrl/Shift+wheel, R: turn a lone gate   Esc / right click: stop");
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
@@ -377,6 +385,11 @@ public class PlannerRunner implements UI.Runner {
             if(terrainpanel.visible != view.terrain.on) {
                 terrainpanel.show(view.terrain.on);
                 terrainpanel.c = Coord.of((sz.x - TerrainPanel.W) / 2, toolbar.sz.y + UI.scale(8));
+            }
+            boolean walls = architect.edit.Walls.kit(view.placing()) != null;
+            if(wallbar.visible != walls) {
+                wallbar.show(walls);
+                wallbar.c = Coord.of((sz.x - wallbar.sz.x) / 2, toolbar.sz.y + UI.scale(8));
             }
             Catalogue cat = catalogue;
             if(panel == null && cat != null) {

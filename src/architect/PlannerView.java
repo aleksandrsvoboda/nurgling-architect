@@ -50,6 +50,7 @@ public class PlannerView extends MapView {
     private boolean linemode = false;
     private List<Coord2d> linepos = Collections.emptyList();
     private final List<Gob> preview = new ArrayList<>();
+    private final List<String> previewres = new ArrayList<>();
     public static final int MAXARRAY = 2000;
 
     /** World-unit rectangle the camera focus may move in; null = unbounded. */
@@ -163,9 +164,44 @@ public class PlannerView extends MapView {
     /** Game snapping, minus the player-facing auto-rotation (there is no player). */
     private class PlannerPlace extends nurgling.NStdPlace {
         public void adjust(Plob plob, Coord pc, Coord2d mc, int modflags) {
-            super.adjust(plob, pc, mc, modflags);
+            Walls.Kit kit = Walls.kit(placingres);
+            if(kit == null) {
+                super.adjust(plob, pc, mc, modflags);
+                placeready = true;
+                return;
+            }
             placeready = true;
+            if(linepress != null) {
+                /* mid-drag the ghost stays where the drag put it (the gate, or the first post) */
+                if(pin != null)
+                    plob.move(pin.rc, pin.a);
+                return;
+            }
+            Walls.Piece piece = kit.piece(placingres);
+            if(piece.gate()) {
+                /* Over a wall, a gate snaps into it: the ghost takes the gate's place and the posts it needs show too. */
+                gatehover = Walls.gateinto(plan, kit, piece, mc);
+                if(gatehover != null) {
+                    PlanObject g = Walls.gateof(kit, gatehover);
+                    plob.move(g.rc, g.a);
+                    showpreview(without(gatehover.add, g));
+                    return;
+                }
+                clearpreview();
+            }
+            /* Wall pieces stand on tile centres. */
+            plob.move(Walls.centre(Walls.tile(mc)));
         }
+    }
+
+    /* Walls: the wall or gate a drag would lay, the gate a click would set into a wall, and where the ghost is held. */
+    private Walls.Layout walllayout = null, gatehover = null;
+    private PlanObject pin = null;
+
+    private static List<PlanObject> without(List<PlanObject> l, PlanObject x) {
+        List<PlanObject> ret = new ArrayList<>(l);
+        ret.remove(x);
+        return(ret);
     }
 
     public String placing() {
@@ -199,6 +235,8 @@ public class PlannerView extends MapView {
 
     public void cancelplace() {
         clearpreview();
+        walllayout = gatehover = null;
+        pin = null;
         linepress = null;
         linemode = false;
         if(this.placing != null)
@@ -245,34 +283,55 @@ public class PlannerView extends MapView {
     }
 
     private void showpreview(List<Coord2d> pos, double ang) {
-        Resource res;
+        List<PlanObject> objs = new ArrayList<>();
+        for(Coord2d p : pos)
+            objs.add(new PlanObject(placingres, null, p, ang));
+        showpreview(objs);
+    }
+
+    /** Ghosts for objects about to be placed. */
+    private void showpreview(List<PlanObject> objs) {
+        Map<String, Resource> res = new HashMap<>();
         try {
-            res = Resource.remote().load(placingres).get();
+            for(PlanObject o : objs)
+                if(!res.containsKey(o.res))
+                    res.put(o.res, Resource.remote().load(o.res).get());
         } catch(Loading l) {
             return;
         }
-        while(preview.size() > pos.size())
-            glob.oc.remove(preview.remove(preview.size() - 1));
+        /* a ghost showing a different resource than wanted at its index is replaced */
+        for(int i = 0; i < preview.size(); i++) {
+            if(i >= objs.size() || !previewres.get(i).equals(objs.get(i).res)) {
+                while(preview.size() > i) {
+                    glob.oc.remove(preview.remove(preview.size() - 1));
+                    previewres.remove(previewres.size() - 1);
+                }
+                break;
+            }
+        }
         try {
-            while(preview.size() < pos.size()) {
+            while(preview.size() < objs.size()) {
+                PlanObject o = objs.get(preview.size());
                 /* Unique (virtual) ids: OCache keys objects by id, so a shared id hides all but one. */
-                Gob g = glob.oc.new Virtual(pos.get(preview.size()), 0);
+                Gob g = glob.oc.new Virtual(o.rc, o.a);
                 g.setattr(new nurgling.GhostAlpha(g));
-                g.setattr(new ResDrawable(g, res));
+                g.setattr(new ResDrawable(g, res.get(o.res)));
                 glob.oc.add(g);
                 preview.add(g);
+                previewres.add(o.res);
             }
         } catch(Loading l) {
-            /* sprite parts still loading; the next drag update fills the row in */
+            /* sprite parts still loading; the next update fills the rest in */
         }
         for(int i = 0; i < preview.size(); i++)
-            preview.get(i).move(pos.get(i), ang);
+            preview.get(i).move(objs.get(i).rc, objs.get(i).a);
     }
 
     private void clearpreview() {
         for(Gob g : preview)
             glob.oc.remove(g);
         preview.clear();
+        previewres.clear();
     }
 
     private void linedrag(Coord c, int mods) {
@@ -287,14 +346,64 @@ public class PlannerView extends MapView {
             protected void hit(Coord pc, Coord2d mc) {
                 if(!linemode || placingres == null)
                     return;
+                Walls.Kit kit = Walls.kit(placingres);
+                if(kit != null) {
+                    walldrag(kit, mc);
+                    return;
+                }
                 linepos = arraypos(linestart, snap(mc, mods), ang, (mods & UI.MOD_META) != 0);
                 showpreview(linepos, ang);
             }
         }.run();
     }
 
+    /** A drag while placing a wall piece: a wall run from the first post, or a gate leading off it. */
+    private void walldrag(Walls.Kit kit, Coord2d mc) {
+        Walls.Piece piece = kit.piece(placingres);
+        Coord a = Walls.tile(linestart);
+        walllayout = piece.gate() ? Walls.gatefrom(plan, kit, piece, a, mc) : Walls.run(plan, kit, a, mc);
+        if(walllayout == null) {
+            pin = null;
+            clearpreview();
+            return;
+        }
+        PlanObject g = piece.gate() ? Walls.gateof(kit, walllayout) : null;
+        pin = (g != null) ? g : new PlanObject(placingres, null, Walls.centre(a), 0);
+        Plob p = plob();
+        if(p != null)
+            p.move(pin.rc, pin.a);
+        List<PlanObject> rest = new ArrayList<>();
+        for(PlanObject o : walllayout.add)
+            if(o != g && !(o.res.equals(placingres) && o.rc.equals(pin.rc)))
+                rest.add(o);
+        showpreview(rest);
+    }
+
+    private void wallend(Walls.Kit kit) {
+        Walls.Piece piece = kit.piece(placingres);
+        Coord a = Walls.tile(linestart);
+        Plob p = plob();
+        if(linemode)
+            Walls.apply(plan, walllayout, piece.gate() ? "Gate" : "Wall");
+        else if(piece.gate())
+            Walls.apply(plan, (gatehover != null) ? gatehover : Walls.gatealong(plan, kit, piece, a, (p != null) ? p.a : 0), "Gate");
+        else
+            Walls.apply(plan, Walls.run(plan, kit, a, Walls.centre(a)), "Wall");
+        walllayout = gatehover = null;
+        pin = null;
+    }
+
     private void lineend() {
         Plob p = plob();
+        Walls.Kit kit = Walls.kit(placingres);
+        if(kit != null && p != null && placeready) {
+            wallend(kit);
+            clearpreview();
+            linemode = false;
+            linepress = null;
+            linestart = null;
+            return;
+        }
         if(linemode && p != null && placingres != null && !linepos.isEmpty()) {
             plan.begin(linepos.size() > 1 ? "Place " + linepos.size() : "Place");
             try {
