@@ -98,7 +98,7 @@ public class AreasPanel extends Widget {
         rowh = Math.max(UI.scale(26), fnd.render("Ag").sz().y + small.render("Ag").sz().y + UI.scale(4));
 
         /* ----- folders and areas ----- */
-        tree = add(new Listbox<Row>(treew, 11, UI.scale(22)) {
+        tree = add(new Listbox<Row>(treew, 10, UI.scale(22)) {
             protected Row listitem(int i) {return(rows.get(i));}
             protected int listitems() {return(rows.size());}
             protected void drawbg(GOut g) {g.chcolor(NStyle.infoBg); g.frect(Coord.z, sz); g.chcolor();}
@@ -132,11 +132,16 @@ public class AreasPanel extends Widget {
             }
         }, treex, top + small.render("Ag").sz().y + GAP);
         int ty = tree.c.y + tree.sz.y + GAP, tbw = (treew - GAP) / 2;
-        add(new Button(tbw, "+ Folder", false, this::newfolder), treex, ty);
-        add(new Button(tbw, "Rename folder", false, this::renamefolder), treex + tbw + GAP, ty);
-        ty += UI.scale(28);
-        add(new Button(tbw, "Move here", false, this::movehere), treex, ty).settip("Move the selected areas into the open folder");
-        add(new Button(tbw, "Delete", false, tool::delete), treex + tbw + GAP, ty).settip("Delete the selected areas (Ctrl+Z brings them back)");
+        Button nb = add(new Button(tbw, "+ Area", false, this::newarea), treex, ty);
+        nb.settip("A new area in the middle of the view, in the open folder: drag it into place, drag its edges to size it (or drag on the ground to draw one)");
+        add(new Button(tbw, "+ Folder", false, this::newfolder), treex + tbw + GAP, ty);
+        int bh = nb.sz.y;
+        ty += bh + GAP;
+        add(new Button(tbw, "Rename folder", false, this::renamefolder), treex, ty);
+        add(new Button(tbw, "Move here", false, this::movehere), treex + tbw + GAP, ty).settip("Move the selected areas into the open folder");
+        ty += bh + GAP;
+        add(new Button(treew, "Delete selected", false, tool::delete), treex, ty).settip("Delete the selected areas (Ctrl+Z brings them back)");
+        ty += bh;
 
         /* ----- the selected area ----- */
         int y = top + small.render("Ag").sz().y + GAP;
@@ -212,6 +217,7 @@ public class AreasPanel extends Widget {
         y = speclisty + speclist.sz.y + GAP;
         int sbw = (detw - GAP * 3) / 4;
         Button addspec = add(new Button(sbw, "+ Add", false, this::addspec), detx, y);
+        int specbottom = y + addspec.sz.y;
         subtype = add(new Button(sbw, "Subtype…", false, this::picksubtype), detx + (sbw + GAP), y);
         stage = add(new Button(sbw, "Stage…", false, this::pickstage), detx + (sbw + GAP) * 2, y);
         spedel = add(new Button(sbw, "Remove", false, this::removespec), detx + (sbw + GAP) * 3, y);
@@ -227,17 +233,17 @@ public class AreasPanel extends Widget {
         indel = add(new Button(ibw, "Remove", false, () -> removeitem("in")), inx + ibw + GAP, by);
         outadd = add(new Button(ibw, "+ Add", false, () -> additem("out")), outx, by);
         outdel = add(new Button(ibw, "Remove", false, () -> removeitem("out")), outx + ibw + GAP, by);
-        by += UI.scale(28);
+        by += inadd.sz.y + GAP;
         intype = add(new Button(colw, TYPENAMES[0], false, () -> cycletype("in")), inx, by);
         outtype = add(new Button(colw, TYPENAMES[0], false, () -> cycletype("out")), outx, by);
-        by += UI.scale(28);
+        by += intype.sz.y + GAP;
         inth = add(thentry("in"), inx + UI.scale(70), by);
         outth = add(thentry("out"), outx + UI.scale(70), by);
         thy = by;
         details.addAll(Arrays.asList(inlist, outlist, inadd, indel, outadd, outdel, intype, outtype, inth, outth));
 
         /* ----- bottom ----- */
-        bottomy = Math.max(Math.max(ty + UI.scale(28), y + UI.scale(28)), by + inth.sz.y) + GAP + UI.scale(14);
+        bottomy = Math.max(Math.max(ty, specbottom), by + inth.sz.y) + GAP * 3;
         int bw = UI.scale(150), x = PAD;
         add(new ToolButton(bw, "Presets…", null, openpresets), x, bottomy); x += bw + GAP;
         add(new ToolButton(bw, "Save as preset…", null, savepreset), x, bottomy).settip("Save the selected areas as an area preset for the game");
@@ -250,7 +256,7 @@ public class AreasPanel extends Widget {
             tool.on = false;
             tool.clearsel();
         }), W - PAD - UI.scale(100), bottomy);
-        prompty = bottomy + UI.scale(28) + GAP;
+        prompty = bottomy + bh + GAP;
         int pw = UI.scale(80);
         entry = add(new TextEntry(W - PAD * 2 - pw * 2 - GAP * 2 - UI.scale(130), "") {
             public void activate(String text) {
@@ -381,6 +387,21 @@ public class AreasPanel extends Widget {
             tool.folder = r.path;
             shownsig = null;
         }
+    }
+
+    /** A new area on the ground in the middle of what this window leaves visible below it. */
+    private void newarea() {
+        Coord sc = Coord.of(view.sz.x / 2, Math.min(view.sz.y - UI.scale(40), (c.y + sz.y + view.sz.y) / 2));
+        view.new Maptest(sc) {
+            protected void hit(Coord pc, Coord2d mc) {
+                tool.newarea(mc.floor(MCache.tilesz));
+                msg.accept("New area below this window: drag it into place, drag its edges or corners to size it");
+            }
+
+            protected void nohit(Coord pc) {
+                tool.newarea(view.cc.floor(MCache.tilesz));
+            }
+        }.run();
     }
 
     private void newfolder() {
@@ -687,6 +708,8 @@ public class AreasPanel extends Widget {
     public void demopicker(String which) {
         if(which.equals("spec"))
             addspec();
+        else if(which.equals("new"))
+            newarea();
         else
             additem("out");
     }

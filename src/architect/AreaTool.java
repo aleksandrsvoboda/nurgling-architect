@@ -284,6 +284,18 @@ public class AreaTool {
 
     /* ---------- editing ---------- */
 
+    /** A new 4x4 area centred on tile at, in the open folder and the active layer, selected. */
+    public void newarea(Coord at) {
+        int n = plan.areas().size() + 1;
+        PlanArea a = PlanArea.simple("Area " + n, PALETTE[(n - 1) % PALETTE.length], Area.sized(at.sub(2, 2), Coord.of(4, 4)), null);
+        PlanArea.Edit e = a.edit();
+        e.path = folder;
+        a = a.with(e);
+        on = true;
+        plan.putarea(a);
+        select(Collections.singleton(a.id), false);
+    }
+
     public void delete() {
         List<PlanArea> s = selected();
         if(s.isEmpty())
