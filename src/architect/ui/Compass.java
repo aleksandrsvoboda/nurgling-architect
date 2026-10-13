@@ -43,10 +43,14 @@ public class Compass extends Widget {
         try {
             Coord2d cc = view.cc;
             o = view.screenxf(cc);
+            if(o == null)
+                return;
             for(int i = 0; i < 4; i++) {
                 Coord3f p = view.screenxf(cc.add(DIRS[i].mul(MCache.tilesz.x * 4)));
+                if(p == null)
+                    continue;
                 double dx = p.x - o.x, dy = p.y - o.y, len = Math.hypot(dx, dy);
-                if(len < 0.001)
+                if(!(len >= 0.001))
                     continue;
                 dx /= len;
                 dy /= len;
@@ -69,7 +73,7 @@ public class Compass extends Widget {
                 g.image(t, lc.sub(t.sz().div(2)));
             }
         } catch(Loading l) {
-            /* map not ready yet */
+            /* map not ready yet: screenxf returns null while the camera's centre is loading */
         }
     }
 
