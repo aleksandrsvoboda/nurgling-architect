@@ -35,6 +35,12 @@ public class AreaPresets {
         return(ArchitectEnv.gameRoot.resolve("area_presets"));
     }
 
+    /** Only files that hold areas are presets; the folder also has index.json listing them. */
+    private static void add(List<Preset> to, JSONObject json, boolean mine) {
+        if(json.optJSONArray("areas") != null)
+            to.add(new Preset(json, mine));
+    }
+
     public static List<Preset> all() {
         List<Preset> ret = new ArrayList<>();
         try {
@@ -44,7 +50,7 @@ public class AreaPresets {
                     if(!e.getName().startsWith("nurgling/areas/presets/") || !e.getName().endsWith(".json"))
                         continue;
                     try(InputStream in = jar.getInputStream(e)) {
-                        ret.add(new Preset(new JSONObject(new String(in.readAllBytes(), StandardCharsets.UTF_8)), false));
+                        add(ret, new JSONObject(new String(in.readAllBytes(), StandardCharsets.UTF_8)), false);
                     } catch(JSONException ex) {
                         /* a broken preset is skipped, the rest stay usable */
                     }
@@ -57,7 +63,7 @@ public class AreaPresets {
             try(Stream<Path> s = Files.list(userdir())) {
                 for(Path p : s.filter(f -> f.toString().endsWith(".json")).collect(Collectors.toList())) {
                     try {
-                        ret.add(new Preset(new JSONObject(new String(Files.readAllBytes(p), StandardCharsets.UTF_8)), true));
+                        add(ret, new JSONObject(new String(Files.readAllBytes(p), StandardCharsets.UTF_8)), true);
                     } catch(JSONException | IOException ex) {
                         /* skipped */
                     }

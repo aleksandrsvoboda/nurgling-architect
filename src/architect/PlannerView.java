@@ -375,6 +375,10 @@ public class PlannerView extends MapView {
     }
 
     public boolean mousedown(MouseDownEvent ev) {
+        /* While a camera drag holds the mouse, presses elsewhere (toolbar, panels) still arrive here; outside
+         * the view there is nothing to hit, and the engine's hit test dies on an empty area. */
+        if(!ev.c.isect(Coord.z, sz))
+            return(true);
         parent.setfocus(this);
         if(play.on) {
             if(ev.b == 1) {

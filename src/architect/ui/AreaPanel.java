@@ -137,7 +137,9 @@ public class AreaPanel extends Widget {
     }
 
     public boolean mousedown(MouseDownEvent ev) {
-        if(super.mousedown(ev))
+        /* Children (buttons, text entries) first: the engine asks this panel before them, and answering
+         * true here would swallow every click meant for a button. */
+        if(ev.propagate(this) || super.mousedown(ev))
             return(true);
         PlanArea a = tool.selarea();
         if(a != null && ev.c.y >= UI.scale(76) && ev.c.y < UI.scale(76) + SW) {

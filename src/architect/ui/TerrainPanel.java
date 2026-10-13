@@ -10,40 +10,59 @@ import java.awt.Color;
 import java.util.*;
 import java.util.function.Supplier;
 
-/** Floating panel for Terrain mode: tool, brush size, ground to paint, and how much soil the plan moves. */
+/**
+ * Floating panel for Terrain mode: tool (lit while chosen), brush size, how much soil the plan moves, and,
+ * for painting, the ground to paint with search. Laid out from the real button and text heights.
+ */
 public class TerrainPanel extends Widget {
-    public static final int W = UI.scale(340);
+    public static final int W = UI.scale(360);
     static final Color TXT = new Color(223, 231, 230), DIM = new Color(143, 163, 164);
+    static final int PAD = UI.scale(8), GAP = UI.scale(6);
     private final TerrainTool tool;
     private final TerrainStore store;
     private final Supplier<Catalogue> cat;
-    private final Map<TerrainTool.Mode, Button> modes = new EnumMap<>(TerrainTool.Mode.class);
     private final TextEntry search;
     private Listbox<Catalogue.Entry> tiles = null;
     private List<Catalogue.Entry> shown = Collections.emptyList();
     private String lastq = null;
     private final Text.Foundry fnd = new Text.Foundry(Text.sans, 11).aa(true);
+    private final Text.Foundry small = new Text.Foundry(Text.sans, 10).aa(true);
     private final Text.Foundry head = new Text.Foundry(Text.sans.deriveFont(java.awt.Font.BOLD), 13).aa(true);
     private final Map<String, Tex> tex = new HashMap<>();
     private final Map<String, Tex> icons = new HashMap<>();
     private long[] soil = {0, 0};
     private int soilseq = -1;
-    static final int LISTY = 132;
+    /* Layout rows (computed once): header text, brush label, soil text, and where the paint section starts. */
+    private final int hdry, brushy, brushh, soily, painty;
+    private final int rowh;
 
     public TerrainPanel(TerrainTool tool, TerrainStore store, Supplier<Catalogue> cat) {
-        super(Coord.of(W, UI.scale(LISTY)));
+        super(Coord.of(W, 10));
         this.tool = tool;
         this.store = store;
         this.cat = cat;
-        int bw = (W - UI.scale(28)) / 4, x = UI.scale(8);
+        int y = PAD;
+        hdry = y;
+        y += head.render("Terrain").sz().y + GAP;
+        int bw = (W - PAD * 2 - GAP * 3) / 4, x = PAD, bh = 0;
         for(TerrainTool.Mode m : TerrainTool.Mode.values()) {
-            modes.put(m, add(new Button(bw, m.label, false, () -> tool.mode = m), x, UI.scale(28)));
-            x += bw + UI.scale(4);
+            ToolButton b = add(new ToolButton(bw, m.label, () -> tool.mode == m, () -> tool.mode = m), x, y);
+            x += bw + GAP;
+            bh = b.sz.y;
         }
-        add(new Button(UI.scale(26), "-", false, () -> tool.radius = Math.max(0, tool.radius - 1)), UI.scale(8), UI.scale(62));
-        add(new Button(UI.scale(26), "+", false, () -> tool.radius = Math.min(25, tool.radius + 1)), UI.scale(130), UI.scale(62));
-        add(new Button(UI.scale(80), "Done", false, () -> tool.on = false), W - UI.scale(88), UI.scale(62));
-        search = add(new TextEntry(W - UI.scale(16), ""), UI.scale(8), UI.scale(LISTY - 26));
+        y += bh + GAP;
+        brushy = y;
+        Button minus = add(new Button(UI.scale(28), "-", false, () -> tool.radius = Math.max(0, tool.radius - 1)), PAD, y);
+        add(new Button(UI.scale(28), "+", false, () -> tool.radius = Math.min(25, tool.radius + 1)), PAD + UI.scale(28) + UI.scale(90), y);
+        add(new Button(UI.scale(80), "Done", false, () -> tool.on = false), W - PAD - UI.scale(80), y);
+        brushh = minus.sz.y;
+        y += brushh + GAP;
+        soily = y;
+        y += fnd.render("Ag").sz().y + GAP;
+        painty = y;
+        search = add(new TextEntry(W - PAD * 2, ""), PAD, painty);
+        rowh = Math.max(UI.scale(24), fnd.render("Ag").sz().y + small.render("Ag").sz().y + UI.scale(4));
+        resize(Coord.of(W, painty));
     }
 
     private Tex text(String s, Color c, Text.Foundry f) {
@@ -70,7 +89,8 @@ public class TerrainPanel extends Widget {
         boolean paint = tool.mode == TerrainTool.Mode.PAINT;
         Catalogue c = cat.get();
         if(paint && c != null && tiles == null) {
-            tiles = add(new Listbox<Catalogue.Entry>(W - UI.scale(16), 9, UI.scale(26)) {
+            int icon = rowh - UI.scale(4);
+            tiles = add(new Listbox<Catalogue.Entry>(W - PAD * 2, 8, rowh) {
                 protected Catalogue.Entry listitem(int i) {return(shown.get(i));}
                 protected int listitems() {return(shown.size());}
                 protected void drawbg(GOut g) {g.chcolor(NStyle.infoBg); g.frect(Coord.z, sz); g.chcolor();}
@@ -82,16 +102,17 @@ public class TerrainPanel extends Widget {
                     }
                     Tex ic = icon(e.res);
                     if(ic != null)
-                        g.image(ic, Coord.of(UI.scale(3), UI.scale(2)), Coord.of(UI.scale(22), UI.scale(22)));
-                    g.image(text(e.name, TXT, fnd), Coord.of(UI.scale(30), UI.scale(2)));
-                    g.image(text(e.category, DIM, fnd), Coord.of(UI.scale(30), UI.scale(13)));
+                        g.image(ic, Coord.of(UI.scale(2), UI.scale(2)), Coord.of(icon, icon));
+                    Tex n = text(e.name, TXT, fnd);
+                    g.image(n, Coord.of(icon + UI.scale(8), UI.scale(1)));
+                    g.image(text(e.category, DIM, small), Coord.of(icon + UI.scale(8), UI.scale(1) + n.sz().y));
                 }
                 public void change(Catalogue.Entry e) {
                     super.change(e);
                     if(e != null)
                         tool.paint = e.res;
                 }
-            }, UI.scale(8), UI.scale(LISTY + 4));
+            }, PAD, painty + search.sz.y + UI.scale(4));
         }
         if(tiles != null) {
             String q = search.text();
@@ -99,14 +120,12 @@ public class TerrainPanel extends Widget {
                 lastq = q;
                 shown = c.search(c.tiles, q);
             }
-            if(tiles.visible != paint) {
+            if(tiles.visible != paint)
                 tiles.show(paint);
-                search.show(paint);
-            }
-        } else if(search.visible != paint) {
-            search.show(paint);
         }
-        int h = paint ? ((tiles != null) ? tiles.c.y + tiles.sz.y + UI.scale(8) : UI.scale(LISTY + 4)) : UI.scale(LISTY - 30);
+        if(search.visible != paint)
+            search.show(paint);
+        int h = paint ? ((tiles != null) ? tiles.c.y + tiles.sz.y + PAD : painty + search.sz.y + PAD) : painty;
         if(sz.y != h)
             resize(Coord.of(W, h));
         if(store.seq != soilseq) {
@@ -122,15 +141,14 @@ public class TerrainPanel extends Widget {
         g.chcolor(NStyle.border);
         g.rect(Coord.z, sz);
         g.chcolor();
-        g.image(text("Terrain", NStyle.border, head), Coord.of(UI.scale(8), UI.scale(5)));
-        g.image(text(hint(), DIM, fnd), Coord.of(UI.scale(80), UI.scale(8)));
-        g.image(text("Brush " + tool.radius, TXT, fnd), Coord.of(UI.scale(42), UI.scale(66)));
-        g.image(text(String.format("Soil vs your map: dug %d, filled %d units", soil[0], soil[1]), TXT, fnd), Coord.of(UI.scale(8), UI.scale(92)));
+        Tex t = text("Terrain", NStyle.border, head);
+        g.image(t, Coord.of(PAD, hdry));
+        Tex hint = text(hint(), DIM, fnd);
+        g.image(hint, Coord.of(sz.x - PAD - hint.sz().x, hdry + (t.sz().y - hint.sz().y) / 2));
+        Tex b = text("Brush " + tool.radius, TXT, fnd);
+        g.image(b, Coord.of(PAD + UI.scale(28) + (UI.scale(90) - b.sz().x) / 2, brushy + (brushh - b.sz().y) / 2));
+        g.image(text(String.format("Soil vs. the original ground: dug %d, filled %d units", soil[0], soil[1]), TXT, fnd), Coord.of(PAD, soily));
         super.draw(g);
-        Button on = modes.get(tool.mode);
-        g.chcolor(NStyle.border);
-        g.rect(on.c, on.sz);
-        g.chcolor();
     }
 
     private String hint() {

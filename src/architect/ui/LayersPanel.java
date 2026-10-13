@@ -13,8 +13,8 @@ import java.util.function.Supplier;
  * to hide or lock; click a folder's arrow to fold it. Buttons below manage layers and move the selection.
  */
 public class LayersPanel extends Widget {
-    public static final int W = UI.scale(240), ROWH = UI.scale(22);
-    static final Color DIM = new Color(143, 163, 164), TXT = new Color(223, 231, 230);
+    public static final int W = UI.scale(240), ROWH = UI.scale(24);
+    static final Color DIM = new Color(143, 163, 164), TXT = new Color(223, 231, 230), OFF = new Color(95, 105, 106);
     private final Plan plan;
     private final Layers layers;
     private final Selection sel;
@@ -165,23 +165,30 @@ public class LayersPanel extends Widget {
                 lg.frect(Coord.of(UI.scale(4), y), Coord.of(sz.x - UI.scale(8), ROWH));
             }
             int cy = y + ROWH / 2;
-            /* eye: filled when visible */
-            lg.chcolor(n.visible ? TXT : DIM);
-            if(n.visible)
-                lg.fellipse(Coord.of(UI.scale(14), cy), Coord.of(UI.scale(5), UI.scale(4)));
-            else
-                lg.line(Coord.of(UI.scale(9), cy), Coord.of(UI.scale(19), cy), 2);
-            /* lock: a small padlock when locked */
-            if(n.locked) {
-                lg.chcolor(NStyle.border);
-                lg.frect(Coord.of(UI.scale(29), cy - UI.scale(1)), Coord.of(UI.scale(8), UI.scale(6)));
-                lg.rect(Coord.of(UI.scale(30), cy - UI.scale(5)), Coord.of(UI.scale(6), UI.scale(5)));
+            /* eye: open (outline and pupil) when visible, a struck-through outline when hidden */
+            Coord ec = Coord.of(UI.scale(14), cy);
+            lg.chcolor(n.visible ? TXT : OFF);
+            lg.fellipse(ec, Coord.of(UI.scale(7), UI.scale(5)));
+            lg.chcolor(NStyle.windowBg);
+            lg.fellipse(ec, Coord.of(UI.scale(6), UI.scale(4)));
+            if(n.visible) {
+                lg.chcolor(TXT);
+                lg.fellipse(ec, Coord.of(UI.scale(3), UI.scale(3)));
             } else {
-                lg.chcolor(70, 84, 86, 255);
-                lg.rect(Coord.of(UI.scale(29), cy - UI.scale(2)), Coord.of(UI.scale(8), UI.scale(6)));
+                lg.chcolor(OFF);
+                lg.line(ec.add(-UI.scale(7), UI.scale(5)), ec.add(UI.scale(7), -UI.scale(5)), 2);
+            }
+            /* lock: a closed orange padlock when locked, a faint open one when not */
+            int lx = UI.scale(28);
+            lg.chcolor(n.locked ? NStyle.border : OFF);
+            lg.frect(Coord.of(lx, cy - UI.scale(1)), Coord.of(UI.scale(11), UI.scale(8)));
+            if(n.locked) {
+                lg.rect(Coord.of(lx + UI.scale(2), cy - UI.scale(7)), Coord.of(UI.scale(7), UI.scale(7)));
+            } else {
+                lg.rect(Coord.of(lx + UI.scale(6), cy - UI.scale(8)), Coord.of(UI.scale(7), UI.scale(7)));
             }
             lg.chcolor();
-            int x = UI.scale(44) + ((n.parent != null) ? UI.scale(14) : 0);
+            int x = UI.scale(48) + ((n.parent != null) ? UI.scale(14) : 0);
             if(n.folder) {
                 lg.chcolor(DIM);
                 Coord t = Coord.of(x, cy);
@@ -209,7 +216,9 @@ public class LayersPanel extends Widget {
     }
 
     public boolean mousedown(MouseDownEvent ev) {
-        if(super.mousedown(ev))
+        /* Children (buttons, text entries) first: the engine asks this panel before them, and answering
+         * true here would swallow every click meant for a button. */
+        if(ev.propagate(this) || super.mousedown(ev))
             return(true);
         int top = listtop();
         if(ev.b != 1 || ev.c.y < top || ev.c.y >= top + listh())
@@ -219,10 +228,10 @@ public class LayersPanel extends Widget {
         if(i < 0 || i >= rows.size())
             return(true);
         Layers.Node n = rows.get(i);
-        if(ev.c.x < UI.scale(24)) {
+        if(ev.c.x < UI.scale(25)) {
             n.visible = !n.visible;
             layers.changed();
-        } else if(ev.c.x < UI.scale(40)) {
+        } else if(ev.c.x < UI.scale(42)) {
             n.locked = !n.locked;
             layers.changed();
         } else if(n.folder) {

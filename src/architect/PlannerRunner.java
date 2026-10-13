@@ -13,6 +13,7 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Color;
 import java.io.IOException;
+import java.util.*;
 import java.nio.file.*;
 
 /**
@@ -167,39 +168,89 @@ public class PlannerRunner implements UI.Runner {
 
     /* ---------- widgets ---------- */
 
-    /** Top strip: plan name, save state and the plan's commands. */
+    /* ---------- modes ---------- */
+
+    void togglePlay() {
+        if(view.play.on) {
+            view.play.stop();
+        } else {
+            view.cancelplace();
+            view.areas.on = false;
+            view.areas.cancelstamp();
+            view.terrain.on = false;
+            view.sel.clear();
+            view.play.start(view.cc);
+        }
+    }
+
+    void toggleAreas() {
+        if(view.play.on)
+            view.play.stop();
+        view.areas.on = !view.areas.on;
+        if(view.areas.on) {
+            view.cancelplace();
+            view.terrain.on = false;
+        } else {
+            view.areas.cancelstamp();
+        }
+    }
+
+    void toggleTerrain() {
+        if(view.play.on)
+            view.play.stop();
+        view.terrain.on = !view.terrain.on;
+        if(view.terrain.on) {
+            view.cancelplace();
+            view.areas.on = false;
+            view.areas.cancelstamp();
+        }
+    }
+
+    /**
+     * Top strip: the plan's name, then its commands in groups - file (save, undo, redo), modes (areas,
+     * terrain, play; lit while active), the collision check switch (lit while on) - and Close on the right.
+     * Its height follows the buttons, so nothing hangs over the view.
+     */
     class Toolbar extends Widget {
-        static final int H = 34;
+        static final int PAD = 5, GAP = 4, GROUP = 18;
         final Text.Foundry fnd = new Text.Foundry(Text.sans.deriveFont(java.awt.Font.BOLD), 14).aa(true);
         final Tex title;
+        final List<Integer> seps = new ArrayList<>();
+        final ToolButton close;
+
         Toolbar(int w) {
-            super(Coord.of(w, UI.scale(H)));
+            super(Coord.of(w, 10));
             title = fnd.render(name, NStyle.border).tex();
-            int x = UI.scale(12) + title.sz().x + UI.scale(20), y = UI.scale(5);
-            for(Object[] b : new Object[][] {
-                    {"Save (Ctrl+S)", (Runnable)() -> {if(save()) msg("Saved");}},
-                    {"Undo", (Runnable)() -> plan.undo()},
-                    {"Redo", (Runnable)() -> plan.redo()},
-                    {"Play", (Runnable)() -> {
-                        if(view.play.on) {
-                            view.play.stop();
-                        } else {
-                            view.cancelplace();
-                            view.areas.on = false;
-                            view.areas.cancelstamp();
-                            view.terrain.on = false;
-                            view.sel.clear();
-                            view.play.start(view.cc);
-                        }
-                    }},
-                    {"Areas", (Runnable)() -> {view.areas.on = !view.areas.on; if(view.areas.on) {view.cancelplace(); view.terrain.on = false;} else view.areas.cancelstamp();}},
-                    {"Terrain", (Runnable)() -> {view.terrain.on = !view.terrain.on; if(view.terrain.on) {view.cancelplace(); view.areas.on = false; view.areas.cancelstamp();}}},
-                    {"Collisions on/off", (Runnable)() -> {view.collisions.toggle(); msg("Collision check " + (view.collisions.enabled ? "on" : "off"));}},
-                    {"Close plan", (Runnable)PlannerRunner.this::close},
-                }) {
-                Button btn = add(new Button(UI.scale(112), (String)b[0], false, (Runnable)b[1]), x, y);
-                x += btn.sz.x + UI.scale(6);
+            int x = UI.scale(12) + title.sz().x + UI.scale(GROUP), y = UI.scale(PAD);
+            Object[][] groups = {
+                {new ToolButton("Save", () -> {if(save()) msg("Saved");}),
+                 new ToolButton("Undo", () -> plan.undo()),
+                 new ToolButton("Redo", () -> plan.redo())},
+                {new ToolButton("Areas", () -> view.areas.on, PlannerRunner.this::toggleAreas),
+                 new ToolButton("Terrain", () -> view.terrain.on, PlannerRunner.this::toggleTerrain),
+                 new ToolButton("Play", () -> view.play.on, PlannerRunner.this::togglePlay)},
+                {new ToolButton("Collision", () -> view.collisions.enabled, () -> view.collisions.toggle())},
+            };
+            int h = 0;
+            for(int gi = 0; gi < groups.length; gi++) {
+                if(gi > 0) {
+                    seps.add(x - UI.scale(GROUP) / 2 - UI.scale(GAP) / 2);
+                }
+                for(Object o : groups[gi]) {
+                    ToolButton btn = add((ToolButton)o, x, y);
+                    x += btn.sz.x + UI.scale(GAP);
+                    h = Math.max(h, btn.sz.y);
+                }
+                x += UI.scale(GROUP) - UI.scale(GAP);
             }
+            close = add(new ToolButton("Close plan", PlannerRunner.this::close), 0, y);
+            resize(Coord.of(w, h + UI.scale(PAD) * 2));
+        }
+
+        public void resize(Coord sz) {
+            super.resize(sz);
+            if(close != null)
+                close.c = Coord.of(sz.x - close.sz.x - UI.scale(10), close.c.y);
         }
 
         public void draw(GOut g) {
@@ -207,6 +258,9 @@ public class PlannerRunner implements UI.Runner {
             g.frect(Coord.z, sz);
             g.chcolor(NStyle.border);
             g.line(Coord.of(0, sz.y - 1), Coord.of(sz.x, sz.y - 1), 1);
+            g.chcolor(70, 84, 86, 255);
+            for(int x : seps)
+                g.line(Coord.of(x, UI.scale(PAD + 3)), Coord.of(x, sz.y - UI.scale(PAD + 3)), 1);
             g.chcolor();
             g.image(title, Coord.of(UI.scale(12), (sz.y - title.sz().y) / 2));
             super.draw(g);

@@ -20,7 +20,7 @@ import java.util.*;
  */
 public class TerrainTool {
     public enum Mode {
-        RAISE("Dig / fill"), LEVEL("Level"), SMOOTH("Smooth"), PAINT("Paint ground");
+        RAISE("Dig / fill"), LEVEL("Level"), SMOOTH("Smooth"), PAINT("Paint");
         public final String label;
         Mode(String label) {this.label = label;}
     }

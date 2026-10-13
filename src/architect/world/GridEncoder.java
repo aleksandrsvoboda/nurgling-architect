@@ -57,6 +57,15 @@ public class GridEncoder {
         for(int i = 0; i < g.z.length; i++)
             h.addfloat32(g.z[i] / 11f);
         layer(out, "h", h);
+
+        /* No overlays (claims, fields) anywhere, but the grid still needs its empty overlay table:
+         * MCache.Grid.getol walks it unguarded, so any area overlay drawn over a grid without one dies. */
+        MessageBuf pi = new MessageBuf();
+        pi.adduint8(255);
+        layer(out, "pi", pi);
+        MessageBuf p = new MessageBuf();
+        p.adduint8(255);
+        layer(out, "p", p);
         /* A written MessageBuf has no readable window yet; hand over a reader of the finished bytes. */
         return(new MessageBuf(out.fin()));
     }
