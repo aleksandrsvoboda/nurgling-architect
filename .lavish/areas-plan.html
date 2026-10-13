@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nurgling Architect — Areas like the game, and area presets</title>
+<style>
+  :root { --bg:#141b1d; --panel:#1d2729; --line:#34474a; --txt:#dfe7e6; --dim:#8fa3a4; --or:#e99c54; --teal:#4fb3a9; --red:#e0665a; }
+  body { background:var(--bg); color:var(--txt); font:15px/1.55 "Segoe UI",system-ui,sans-serif; margin:0; }
+  main { max-width:1000px; margin:0 auto; padding:32px 28px 90px; }
+  h1 { color:var(--or); font-size:26px; margin:0 0 4px; }
+  h2 { color:var(--or); font-size:19px; margin:38px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  h3 { color:var(--teal); font-size:16px; margin:22px 0 6px; }
+  p.lead { color:var(--dim); margin-top:0; }
+  code { background:#0f1517; border:1px solid var(--line); padding:1px 5px; border-radius:3px; font-size:13px; }
+  pre { background:#0f1517; border:1px solid var(--line); padding:12px 14px; overflow:auto; font-size:12.5px; line-height:1.4; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:6px 9px; vertical-align:top; text-align:left; }
+  th { background:var(--panel); color:var(--dim); font-weight:600; }
+  .card { background:var(--panel); border:1px solid var(--line); padding:12px 16px; margin:10px 0; }
+  .decide { border-left:3px solid var(--or); }
+  .risk { border-left:3px solid var(--red); }
+  .ok { color:var(--teal); } .no { color:var(--red); } .dim { color:var(--dim); }
+  ol li, ul li { margin:3px 0; }
+</style>
+</head>
+<body><main>
+
+<h1>Areas in Nurgling Architect, like the game's</h1>
+<p class="lead">Draw areas, name them, put them in folders, give them specialisations and Take/Put rules — then save them as area presets the game places as-is.
+Plan only, nothing built yet. Read against nurgling2 at <code>a14d18be6</code>.</p>
+
+<h2>1. What the game has, what the planner has</h2>
+<table>
+<tr><th>Area property (game)</th><th>Stored in the planner today?</th><th>Editable in the planner today?</th></tr>
+<tr><td>Rectangle (≤ 100 tiles a side)</td><td class="ok">yes</td><td>draw, move with arrows; no resize</td></tr>
+<tr><td>Name, colour</td><td class="ok">yes</td><td>small panel, easy to miss</td></tr>
+<tr><td>Folder (<code>path</code>, e.g. <code>/Farm/Racks</code>)</td><td class="ok">yes (kept from stamped presets)</td><td class="no">no</td></tr>
+<tr><td>"Hide" flag</td><td class="ok">yes</td><td class="no">no</td></tr>
+<tr><td>Specialisations <code>{name, subtype?, min_harvest_stage?}</code> — 90+ kinds (Smelters, Crop(Wheat), Fuel(Branch)…)</td><td class="ok">yes (raw)</td><td class="no">no</td></tr>
+<tr><td>Take / Put items <code>{name, static: icon res, type: CONTAINER|PILE|BARREL|BARTER, th?}</code></td><td class="ok">yes (raw)</td><td class="no">no</td></tr>
+<tr><td>Pile fill direction</td><td class="ok">yes</td><td class="no">no (and not turned when a preset is turned — the game turns it)</td></tr>
+</table>
+<p>So the data side is already right — areas made from stamped presets keep everything and export intact. What's missing is the <b>editing</b>, and a proper <b>save to the game's preset folder</b>.</p>
+
+<h3>How the game edits them (to copy)</h3>
+<ul>
+<li><b>Specialisations</b>: a searchable list of every kind with its icon (<code>nurgling.widgets.Specialisation</code>), the bots that use it in the tooltip (<code>SpecialisationUsage</code>); some have a subtype menu (<code>SpecialisationData</code>: crop, seed, fuel per burner, barrel contents, cistern, cheese racks…) and crop fields a minimum harvest stage.</li>
+<li><b>Take / Put</b>: you drag an item from your inventory onto the box; a gear sets a threshold and the storage type. <span class="no">The planner has no inventory</span> — this is the one thing that needs a new way in (§2.3).</li>
+<li><b>Presets</b>: <code>%APPDATA%\Haven and Hearth\area_presets\</code>, one JSON per preset, same naming/atomic-write rules as blueprints; built-ins ship inside the client jar (the planner already reads those).</li>
+</ul>
+
+<h2>2. Design</h2>
+
+<h3>2.1 An Areas window shaped like the game's</h3>
+<pre>
+┌ Areas ───────────────────────────────────────────────────────────────────────────┐
+│ ┌ Areas & folders ───────┐ ┌ Selected: Ovens ──────────────┐ ┌ Take ──┐ ┌ Put ──┐ │
+│ │ ▾ Bakery               │ │ Name [Ovens            ]      │ │ [img]  │ │ [img] │ │
+│ │     Ovens         ■    │ │ Colour ■■■■■■■■  Hide in game │ │ Dough  │ │ Bread │ │
+│ │     Fuel: Branch  ■    │ │ Fill   [left → right ▾]       │ │  th 20 │ │       │ │
+│ │ ▸ Racks                │ │ Specialisations               │ │        │ │       │ │
+│ │   Straw           ■    │ │  [ic] Ovens                ✕  │ │ + Add  │ │ + Add │ │
+│ │                        │ │  [ic] Fuel  (Branch ▾)     ✕  │ └────────┘ └───────┘ │
+│ │ [+Folder][Rename][Del] │ │  + Add specialisation         │                      │
+│ └────────────────────────┘ └───────────────────────────────┘                      │
+│ [Save as preset ▾] [Presets…]   Copy settings  Paste settings          [Done]     │
+└───────────────────────────────────────────────────────────────────────────────────┘
+</pre>
+<ul>
+<li>Toolbar <b>Areas</b> opens it (replaces today's small panel). Left: areas grouped in the game's folders, drag an area onto a folder to move it, + Folder / Rename / Delete. Middle: the selected area. Right: Take and Put, as in the game.</li>
+<li><b>On the map</b> (Areas mode): drag on the ground draws a new area (tile-snapped), click selects (Shift adds), drag a selected area to move it, <b>drag its edges or corners to resize</b>, Del deletes, arrows nudge, Ctrl+C/V duplicate with all settings. Names drawn on the areas as now. Sides over 100 tiles are refused with a hint (the game would reject the preset).</li>
+<li><b>Copy / paste settings</b>: copy specialisations + Take/Put + fill from one area, paste onto one or many selected ones — fast for "ten identical cupboard areas".</li>
+<li>Everything is one undo step per change, like objects.</li>
+</ul>
+
+<h3>2.2 Specialisations</h3>
+<ul>
+<li>The list, names, icons and subtype choices come <b>from the game's own classes in the engine jar</b> (<code>Specialisation.SpecName</code> + <code>findSpecialisation</code>, <code>SpecialisationData</code>, <code>FuelZones</code>, crop stages) — not copied — so the planner offers exactly what that client version knows; refreshing the engine (sync) brings new ones.</li>
+<li>"+ Add specialisation" opens a searchable picker (icon, name, which bots use it). Subtype picked from a small menu; crop fields get the min-harvest-stage choice.</li>
+<li>Saving writes the same <code>{name, subtype, min_harvest_stage}</code> objects the game writes.</li>
+</ul>
+
+<h3>2.3 Take / Put without an inventory</h3>
+<ul>
+<li><b>"+ Add" opens an item picker</b> built on the client's own item vocabulary, <code>nurgling.tools.VSpec</code> (read from the engine, not copied): <b>1,078 items in 127 categories</b> (Spices, Crop Seeds, Fish, Tuber…), each already in the exact Take/Put form <code>{static, name}</code> with the names the bots match. Browse by category or search; items used in the built-in area presets are added to it.</li>
+<li>An entry is written exactly like the game's: <code>{name, static: "gfx/invobjs/…", type, th?}</code>.</li>
+<li>Per item: threshold, storage type (Container / Pile / Barrel / Barter), remove — the game's gear menu.</li>
+<li><b>Free-text fallback</b> ("Other item…"): type the exact in-game name for anything the list lacks, optional icon. Bots match items by name, so this must be the name the game shows.</li>
+</ul>
+
+<h3>2.4 Area presets, both ways</h3>
+<ul>
+<li><b>Save as preset</b> (game format 1, into the game's <code>area_presets\</code> folder, same naming/<code>.bak</code>/lossless-rename rules as blueprints):
+  selected areas and/or folders (folder paths kept relative, as the game's capture does) · all visible areas · a dragged region. Name + description prompt.</li>
+<li><b>Presets…</b>: built-in (from the engine) and yours, with description and a footprint thumbnail; Place (stamp: wheel/R turn, F mirror, click, Esc), Rename, Describe, Delete, Export, Import — the Blueprints window's pattern.</li>
+<li>Stamping uses the game's exact turn/mirror, <b>including turning the fill direction</b> (missing today), and puts the areas in a folder named after the preset, like the game.</li>
+<li>Today's "Export areas" file dialog goes away in favour of this.</li>
+</ul>
+
+<h3>2.5 Small things that come with it</h3>
+<ul>
+<li>Areas exist only to make presets: nothing is read from the areas players have in their game. A preset can still group its areas in sub-folders (the preset format's <code>path</code>, e.g. "Racks"); that is just a field on the area. Planner layers keep doing show/hide/lock.</li>
+<li>Area labels show the main specialisation icon next to the name.</li>
+<li>Status/hint line explains Areas-mode mouse and keys.</li>
+</ul>
+
+<h2>3. Steps</h2>
+<ol>
+<li><b>Model</b>: editing operations on areas (name, colour, path, hide, fill, specs, items) as undoable changes; preset entries round-trip losslessly. Tests: every built-in game preset → planner → saved → identical; game turn/mirror parity incl. fill.</li>
+<li><b>Map tools</b>: select / multi-select, move, resize handles, duplicate, 100-tile limit.</li>
+<li><b>Areas window</b>: folder tree with drag-to-folder, details column, Take/Put columns.</li>
+<li><b>Specialisation picker</b> from the engine's lists, subtypes, crop stage.</li>
+<li><b>Item picker</b> from <code>VSpec</code> categories + built-in preset items, search, free text; threshold/type menu.</li>
+<li><b>Presets</b>: shared preset-folder code with Blueprints; save (selection/folders, visible, region), presets window, stamping with fill direction.</li>
+<li><b>Check against the game</b>: a preset saved in the planner listed and placed by the game with specs and Take/Put intact (needs the game running — you, or me with your OK).</li>
+<li>Build, tests, commit, push.</li>
+</ol>
+
+<h2>4. Decisions for you</h2>
+<div class="card decide"><b>D1 — Where item names come from.</b> I'd build the picker from the game's own item resources (their tooltip names) plus items in built-in presets, with free text for the rest.
+<span class="dim">Alternative: nurgling's <code>item-icons.bin</code> (17 MB, already in the engine) — but it uses wiki names that don't always match the game ("Raw Boar" vs "Raw Wild Pork"), and a wrong name means the bot silently ignores the rule.</span><br><span class="ok"><b>Answered:</b> do what the client does → <code>VSpec</code> (§2.3).</span></div>
+<div class="card decide"><b>D2 — Writing into the game's <code>area_presets\</code> folder</b> (save, rename, delete with confirmation), same as you allowed for blueprints. OK?<br><span class="ok"><b>Answered:</b> yes.</span></div>
+<div class="card decide"><b>D3 — Replace today's small Areas panel</b> with the game-shaped Areas window. OK?<br><span class="ok"><b>Answered:</b> yes.</span></div>
+<div class="card decide"><b>D4 — Folders.</b> Areas get the game's folders (what the game's Areas list shows), separate from planner layers (which only do show/hide/lock for planning).
+<span class="dim">Alternative: one hierarchy — planner layer folders double as game area folders. Simpler to look at, but layers also hold objects, so a layer named "Racks" would hold both.</span><br><span class="ok"><b>Answered:</b> presets only, nothing pulled from players' areas; sub-folders are just a field inside the preset (§2.5).</span></div>
+<div class="card decide"><b>D5 — Resize handles and copy/paste settings</b> on the map: include? (I'd include both.)<br><span class="ok"><b>Answered:</b> yes, both.</span></div>
+
+<h2>5. Risks</h2>
+<div class="card risk"><b>Item names.</b> A few items show a different name in-game than their resource's tooltip (meat cuts, some dynamic names). Free text and the built-in-preset names cover them; the picker shows the exact name that will be written.</div>
+<div class="card risk"><b>Engine version.</b> Specialisations follow the engine snapshot in the planner. A spec added to nurgling later appears after the engine is refreshed; unknown specs in an imported preset are kept and shown by name, never dropped.</div>
+<div class="card risk"><b>Pending: engine slimming.</b> The earlier "slim the engine + rewrite history" step is still waiting on your OK. This plan uses <code>VSpec</code> (classes, tiny), not <code>item-icons.bin</code>, so removing that stays possible; the specialisation and item icons it shows come from <code>nurgling-res.jar</code> and the game server, which stay.</div>
+
+</main></body>
+</html>

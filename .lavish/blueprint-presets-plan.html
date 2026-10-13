@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nurgling Architect — Blueprint presets plan</title>
+<style>
+  :root { --bg:#141b1d; --panel:#1d2729; --line:#34474a; --txt:#dfe7e6; --dim:#8fa3a4; --or:#e99c54; --teal:#4fb3a9; --red:#e0665a; }
+  body { background:var(--bg); color:var(--txt); font:15px/1.55 "Segoe UI",system-ui,sans-serif; margin:0; }
+  main { max-width:980px; margin:0 auto; padding:32px 28px 80px; }
+  h1 { color:var(--or); font-size:26px; margin:0 0 4px; }
+  h2 { color:var(--or); font-size:19px; margin:38px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  h3 { color:var(--teal); font-size:16px; margin:22px 0 6px; }
+  p.lead { color:var(--dim); margin-top:0; }
+  code { background:#0f1517; border:1px solid var(--line); padding:1px 5px; border-radius:3px; font-size:13px; }
+  pre { background:#0f1517; border:1px solid var(--line); padding:12px 14px; overflow:auto; font-size:13px; line-height:1.45; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:6px 9px; vertical-align:top; text-align:left; }
+  th { background:var(--panel); color:var(--dim); font-weight:600; }
+  .card { background:var(--panel); border:1px solid var(--line); padding:12px 16px; margin:10px 0; }
+  .decide { border-left:3px solid var(--or); }
+  .risk { border-left:3px solid var(--red); }
+  .tag { display:inline-block; font-size:12px; padding:0 7px; border:1px solid var(--line); color:var(--dim); margin-right:4px; }
+  ol li, ul li { margin:3px 0; }
+  .dim { color:var(--dim); }
+</style>
+</head>
+<body><main>
+
+<h1>Blueprint presets in Nurgling Architect</h1>
+<p class="lead">The planner's output becomes the game's own Base planner presets: same files, same folder, both ways.
+Planned on 2026-10-13 against nurgling2 commit <code>a14d18be6 Blueprint presets</code>.</p>
+
+<h2>1. What the game does (read from the code)</h2>
+<table>
+<tr><th>Thing</th><th>In nurgling2</th></tr>
+<tr><td>Folder</td><td><code>%APPDATA%\Haven and Hearth\planner_presets\</code>, one <code>.json</code> per preset, shared by every profile and world (<code>PlannerPresetStore</code>). You already have <code>Layer_01.json</code> there.</td></tr>
+<tr><td>File</td><td><code>{format:1, kind:"layer"|"folder", name, description?, size:{w,h} (tiles), layers:[{name, ghosts:[{res, sdt? (base64), x, y, angle}]}]}</code>. x/y are world units from the box's top-left <b>tile corner</b>, so every object keeps its sub-tile snap.</td></tr>
+<tr><td>Saving</td><td>Two ways: <b>Save preset</b> (the selected layer, or a folder with all its layers) and <b>Save region</b> (drag a rectangle: every visible layer's objects inside; a folder preset if more than one layer). Box size comes from the objects' footprints (<code>NHitBox</code> custom box, else one tile).</td></tr>
+<tr><td>File names</td><td>Slug of the name (<code>AreaPresetStore.slug</code>), <code>-2</code>, <code>-3</code>… if taken. Written atomically (<code>.tmp</code> then rename, keeps a <code>.bak</code>).</td></tr>
+<tr><td>Placing</td><td>Stamp follows the cursor a whole tile at a time (cursor = middle of the box), wheel/R turns 90°, F mirrors, left click places, right click/Esc cancels. A <b>layer</b> preset becomes a new layer in the open folder; a <b>folder</b> preset becomes a new root folder.</td></tr>
+<tr><td>Window</td><td>List with thumbnail, size, object count; Place, Rename, Delete, Export, Import, Edit description.</td></tr>
+<tr><td>Object state (<code>sdt</code>)</td><td>Only used to <b>draw</b> the ghost. It is whatever the server gave the placing ghost: your file has the fireplace as <code>Aw==</code> (parts 0+1) and the metal cauldron as <code>AAg=</code> (part 11), the same variant bits the planner already uses.</td></tr>
+</table>
+
+<h2>2. Design</h2>
+
+<h3>2.1 Same folder, same format, no shared code</h3>
+<ul>
+<li>Read and write <code>%APPDATA%\Haven and Hearth\planner_presets\</code> directly (the planner already knows that root for area presets). Created on first save if the game was never run.</li>
+<li>Own small reader/writer for format 1 in the planner (<code>architect.io.Blueprints</code>), not nurgling's classes: the pinned engine jar predates them and the projects stay independent. A test reads your real game file and checks a round trip.</li>
+<li><b>Lossless rewrite</b>: rename/describe edits only <code>name</code>/<code>description</code> in the original JSON, so fields a newer game version adds survive. Files of another <code>format</code> are listed greyed ("made by a newer game") and never rewritten.</li>
+<li>Same slug naming, same atomic write with <code>.bak</code>, delete removes the <code>.bak</code> too — so the game sees exactly what it would have written.</li>
+</ul>
+
+<h3>2.2 Saving from the planner</h3>
+<table>
+<tr><th>Action</th><th>Makes</th><th>Where in the UI</th></tr>
+<tr><td>Save layer / folder as blueprint</td><td>The selected layer (<code>kind:"layer"</code>) or a folder with its layers (<code>kind:"folder"</code>), like the game's <i>Save preset</i></td><td>Layers panel: new <b>Save as blueprint</b> button (acts on the active layer or its folder; folder rows get it too)</td></tr>
+<tr><td>Save region</td><td>Objects of visible layers inside a dragged rectangle; folder if more than one layer, like the game's <i>Save region</i></td><td>Blueprints window: <b>Save region</b> → drag on the map</td></tr>
+<tr><td>Save selection</td><td>The selected objects, keeping their layers</td><td>Selection: Ctrl+B / Blueprints window <b>Save selection</b> (planner extra; the game has no object selection)</td></tr>
+</table>
+<p>Name and optional description are asked in a small dialog. Objects are written as the planner draws them:
+the object's own state if it has one (cauldron/plow variants), else the planner's default look (all parts for tar kiln/stockpiles,
+grown crops) so the game shows them instead of an invisible ghost.</p>
+
+<h3>2.3 Loading (placing) in the planner</h3>
+<ul>
+<li>Blueprints window → <b>Place</b>: the same stamp as the game — ghost previews of every object, whole-tile moves, wheel/R turn, F mirror, left click places, right click/Esc cancels; the box turns red outside the plannable world.</li>
+<li>Result matches the game: layer preset → new layer in the active folder; folder preset → new folder with its layers. Names made unique (<i>Mill yard</i>, <i>Mill yard 2</i>).</li>
+<li>One undo step undoes the whole stamp, new layers and folder included.</li>
+<li>Turn and mirror use the game's exact math (ported from <code>PlannerPreset.transformed</code>), checked by tests on the same inputs.</li>
+<li>Objects the planner cannot draw are still placed (and saved back), just without a preview; the status bar counts them.</li>
+</ul>
+
+<h3>2.4 The Blueprints window</h3>
+<pre>
+┌ Blueprints ─────────────────────────────────────────────────────────┐
+│ ┌──────────────────────────────┐  ┌─────────────────────────────┐   │
+│ │ ▣ Layer 01        16×15  3   │  │  [ top-down thumbnail ]     │   │
+│ │ ▣ Mill yard       12×9  41   │  │                             │   │
+│ │ ▣ Palisade ring   30×30 120  │  │  16 × 15 tiles · 3 objects  │   │
+│ │ ░ Newer format    (greyed)   │  │  1 layer                    │   │
+│ └──────────────────────────────┘  │  description text…          │   │
+│                                   └─────────────────────────────┘   │
+│ [Place] [Rename] [Describe] [Delete] [Export…] [Import…]             │
+│ [Save region] [Save selection]                [Open folder] [↻]     │
+└─────────────────────────────────────────────────────────────────────┘
+</pre>
+<ul>
+<li>Toolbar gets a <b>Blueprints</b> button (lit while open), next to Areas/Terrain.</li>
+<li>The list re-reads the folder when the window opens and every few seconds while open (cheap: compares file times), so presets saved in the game show up without restarting.</li>
+<li>Delete asks first (it removes the file the game uses too). Export/Import copy files in and out, like the game.</li>
+<li>Thumbnail: the objects' footprints from above, drawn like the game's window.</li>
+</ul>
+
+<h3>2.5 Small fixes that come with it</h3>
+<ul>
+<li>Fireplace build entry gets the game's state (<code>pow</code> parts 0+1) instead of "all parts", so planner and game show the same fireplace.</li>
+<li><code>AreaPresets</code> and <code>Blueprints</code> share one place for the game folder path.</li>
+</ul>
+
+<h2>3. Steps</h2>
+<ol>
+<li><b>Format</b> — <code>architect.io.Blueprints</code>: parse/write format 1, slug names, atomic write + <code>.bak</code>, lossless rename/describe, list/delete/import/export. Tests: your <code>Layer_01.json</code> round trip, unknown fields kept, other formats refused.</li>
+<li><b>Transform &amp; capture</b> — box from the objects' footprints with the tile-corner origin; turn/mirror ported 1:1. Tests: game math on fixed cases, capture → place reproduces the exact positions.</li>
+<li><b>Placing</b> — <code>BlueprintStamp</code> tool in the view (previews, turn, mirror, red box, cancel), plan insertion as one undo step including new layers/folder.</li>
+<li><b>Saving</b> — layer/folder, region drag, selection; name/description dialog; state written as drawn.</li>
+<li><b>Window</b> — list, thumbnail, buttons, auto-refresh, toolbar button, status hints.</li>
+<li><b>Check against the game</b> — save in the planner → open in nurgling2's Presets window and place; save in the game → place in the planner. Screenshots of both. (Needs you to run the game for the game side, or I run it with your OK.)</li>
+<li>Build, tests, commit, push.</li>
+</ol>
+
+<h2>4. Decisions for you</h2>
+<div class="card decide"><b>D1 — Box size.</b> The game sizes the box from nurgling's hand-made hitboxes (one tile for anything without one, e.g. most buildings), so big buildings poke out of the box.
+I'd use the planner's exact footprints (the real collision shapes) for presets saved in the planner: the box then really contains everything, and the game places them the same way.
+<span class="dim">Alternative: copy the game's rule exactly so the same layout saved in either app gives an identical file.</span></div>
+<div class="card decide"><b>D2 — Writing into the game folder.</b> Until now the planner never wrote into the game's files. This plan writes, renames and deletes in <code>planner_presets\</code> only (nothing else of the game's), with a confirmation for delete. OK?</div>
+<div class="card decide"><b>D3 — Areas.</b> Game blueprint presets hold objects only; areas have their own presets (the planner already exports those). Keep them separate (my suggestion), or also offer "save areas too" writing an area preset with the same name?</div>
+<div class="card decide"><b>D4 — Save selection.</b> A planner-only extra (the game has region and layer/folder). Include it?</div>
+
+<h2>5. Risks</h2>
+<div class="card risk"><b>Objects only the planner has.</b> The planner can place things the game never puts in a Base plan (trees, herbs, rocks, wall pieces). The game draws any of them as ghosts, but some may need state the game can't guess; they are written with the planner's look, which fixes most. Checked in step 6.</div>
+<div class="card risk"><b>Game running at the same time.</b> The game reads the folder when its window opens and writes whole files atomically; the planner does the same, so the worst case is a list that is a few seconds stale.</div>
+<div class="card risk"><b>Format drift.</b> If nurgling2 bumps the format, the planner lists those files greyed and leaves them alone until updated.</div>
+
+</main></body>
+</html>
