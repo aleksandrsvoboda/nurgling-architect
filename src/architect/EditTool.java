@@ -11,7 +11,7 @@ import java.util.*;
  * Selecting and changing planned objects in the view (whenever nothing is being placed).
  *
  * Click selects (Shift toggles), dragging a selected object moves the selection with placing's snapping
- * (tile centre, Shift fine grid, Ctrl free), dragging on empty ground box-selects. Keys: R / Shift+R turn the
+ * (tile centre, Shift fine grid, Ctrl free but sticking flush to neighbours, as in the game), dragging on empty ground box-selects. Keys: R / Shift+R turn the
  * selection 90 degrees, Delete removes, arrows nudge, Ctrl+A/C/V/D select all/copy/paste/duplicate,
  * Ctrl+Z / Ctrl+Y undo/redo, Esc clears the selection.
  *
@@ -121,6 +121,13 @@ public class EditTool {
                         return;
                     Coord2d to = PlannerView.snap(from.add(mc.sub(grabmc)), mods);
                     Coord2d d = to.sub(from);
+                    if((mods & UI.MOD_CTRL) != 0) {
+                        /* Ctrl, as in the game: free, but sticking flush to the neighbours */
+                        Map<PlanObject, Coord2d> at = new HashMap<>();
+                        for(Map.Entry<PlanObject, Coord2d> e : starts.entrySet())
+                            at.put(e.getKey(), e.getValue().add(d));
+                        d = d.add(GroupSnap.shift(plan, at));
+                    }
                     for(Map.Entry<PlanObject, Coord2d> e : starts.entrySet())
                         plan.move(e.getKey(), e.getValue().add(d), e.getKey().a);
                 }

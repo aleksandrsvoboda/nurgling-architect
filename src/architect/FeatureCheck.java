@@ -15,6 +15,8 @@ class FeatureCheck {
     private double t0 = -1;
     private int step = 0;
     private PlanObject a, b;
+    private MapView.Plob ctrlplob = null;
+    private String pending = null;
 
     FeatureCheck(PlannerView mv) {
         this.mv = mv;
@@ -50,13 +52,48 @@ class FeatureCheck {
                 Coord2d near = a.rc.add(0, -12);
                 Coord2d s = nurgling.tools.PlacementSnap.snap(p, near);
                 System.out.println("[featurecheck] ctrl snap: cursor " + near + " -> " + s + " (cupboard at " + a.rc + ")");
+                /* the real path: the ghost's own adjust with Ctrl held, next to objects of the loaded plan */
+                int n = 0;
+                for(PlanObject o : mv.plan.objects()) {
+                    if(o == a || o == b || o.gob() == null || n >= 6)
+                        continue;
+                    n++;
+                    Coord2d mc = o.rc.add(0, -14);
+                    p.adjust.adjust(p, Coord.z, mc, UI.MOD_CTRL);
+                    Gob g = o.gob();
+                    System.out.println("[featurecheck] adjust+Ctrl near " + o.res + " at " + o.rc + ": cursor " + mc + " -> ghost " + p.rc
+                                       + "  (hitbox " + ((g.ngob == null) ? "no ngob" : g.ngob.hitBox) + ", virtual " + g.virtual + ", class " + g.getClass().getSimpleName() + ")");
+                }
             } else {
                 System.out.println("[featurecheck] ctrl snap: placing ghost not ready");
             }
-            mv.cancelplace();
+            ctrlplob = p;
             break;
         }
-        case 32: {
+        default:
+            if(step >= 31 && step < 71 && ctrlplob != null) {
+                /* a real mouse move over the map beside a drying frame, Ctrl held or not; read a few frames later */
+                int k = (step - 31) / 10, ph = (step - 31) % 10;
+                PlanObject f = null;
+                for(PlanObject o : mv.plan.objects())
+                    if(o.res.endsWith("/dframe")) { f = o; break; }
+                if(f == null)
+                    break;
+                boolean ctrl = (k % 2) == 0;
+                Coord2d mc = f.rc.add((k >= 2) ? 2.3 : 0.7, -14.2);
+                if(ph == 0) {
+                    Coord3f sp = mv.screenxf(mc);
+                    mv.ui.modctrl = ctrl;
+                    mv.mousemove(new Widget.MouseMoveEvent(Coord.of(Math.round(sp.x), Math.round(sp.y))));
+                } else if(ph == 6) {
+                    System.out.println("[featurecheck] mouse move" + (ctrl ? " with Ctrl" : " without Ctrl") + " to " + mc + " beside frame at " + f.rc + " -> ghost " + ctrlplob.rc);
+                    mv.ui.modctrl = false;
+                }
+            }
+            if(step == 71 && ctrlplob != null)
+                mv.cancelplace();
+            break;
+        case 72: {
             Coord2d ra = a.rc, rb = b.rc;
             double aa = a.a, ab = b.a;
             mv.sel.set(Arrays.asList(a, b));
@@ -69,7 +106,7 @@ class FeatureCheck {
             System.out.println("[featurecheck] after 2 undos: a " + a.rc + " b " + b.rc);
             break;
         }
-        case 34: {
+        case 74: {
             TerrainTool t = mv.terrain;
             t.paint = "gfx/tiles/paving/graybrick";
             t.paintside = 1;

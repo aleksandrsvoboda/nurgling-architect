@@ -391,7 +391,7 @@ public class PlannerRunner implements UI.Runner {
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
-                return("Drag a selected object: move all   Shift+click: add/remove   R: turn   F / Shift+F: mirror   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Esc: deselect");
+                return("Drag a selected object: move all (Ctrl: stick to neighbours)   Shift+click: add/remove   R: turn   F / Shift+F: mirror   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Esc: deselect");
             return("Click: select   Shift+click: add   Drag on ground: box select   Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down   Ctrl+B: bounding boxes");
         }
 
@@ -412,6 +412,7 @@ public class PlannerRunner implements UI.Runner {
         private EditCheck editcheck = null;
         private AreaCheck areacheck = null;
         private FeatureCheck featurecheck = null;
+        private RealSnapCheck realsnap = null;
         private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
@@ -487,6 +488,10 @@ public class PlannerRunner implements UI.Runner {
                         areaspanel.demopicker(ad);
                 }
             }
+            if(realsnap == null && Boolean.getBoolean("architect.realsnap"))
+                realsnap = new RealSnapCheck(view);
+            if(realsnap != null)
+                realsnap.tick();
             if(featurecheck == null && Boolean.getBoolean("architect.featurecheck"))
                 featurecheck = new FeatureCheck(view);
             if(featurecheck != null)
