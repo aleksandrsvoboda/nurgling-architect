@@ -8,13 +8,27 @@ You plan on a **generated world** (from a seed, in one of five styles) or a **fl
 - plan nurgling areas and export them as an area preset;
 - reshape and pave the ground; this is visual only.
 
-## Build and run (Windows JDK 21+, Ant)
+## Run it
+
+Clone and double-click **`run.bat`** (Windows). That's all:
+- `runtime/`: a bundled Java 21, so nothing else needs installing.
+- `engine/`: the nurgling client engine.
+- `pack/`: the game art (objects, ground, build menu).
+- `app/architect.jar`: the planner.
+
+You don't need the game installed. If a Haven & Hearth game cache exists on the PC, the planner also reads it, read-only, for anything missing from the pack.
+
+The pack holds Haven & Hearth's own game assets. Keep the repository private unless you have the right to redistribute them.
+
+## Developing (JDK 21+, Ant)
 
 ```
-ant sync-engine   # copy the built client jars from ../nurgling2/bin into engine/ (pinned)
-ant jar           # build/architect.jar
+ant jar           # app/architect.jar
 ant test          # plain-main tests
-run.bat           # or: ant run
+ant sync-engine   # refresh engine/ from ../nurgling2/bin (pinned; only when you choose)
+ant runtime       # rebuild the bundled Java in runtime/ with jlink
+java -cp app/architect.jar architect.DevTools pack     # rebuild pack/ from this PC's game cache
+java -cp app/architect.jar architect.DevTools verify   # check every object/tile loads from the pack
 ```
 
 The engine needs nurgling's `feat/mapraster-owner-center` changes:
@@ -28,12 +42,12 @@ Dev helpers:
 - `tools/stop.ps1`: stop the running planner.
 - `tools/histo.ps1`: heap histogram.
 - `tools/shot.ps1` and `tools/front.ps1`: take a screenshot; bring the window to the front.
-- `java -cp build/architect.jar architect.DevTools index|gen`: catalogue statistics; generator previews as PNG.
+- `java -cp app/architect.jar architect.DevTools index|gen`: catalogue statistics; generator previews as PNG.
 
 ## Where things live
 
 - Planner settings and plans: `%APPDATA%\Nurgling Architect` (`plans\*.hplan` plus a `.hterrain` file per plan). Override with `-Darchitect.home=`.
-- Game cache, read-only: `%APPDATA%\Haven and Hearth\data`. Override with `-Darchitect.gamedata=`.
+- Game art: `pack/` in the clone. If a game cache exists at `%APPDATA%\Haven and Hearth\data` (override with `-Darchitect.gamedata=`), it's read too, read-only.
 - Java preferences node: `architect` (`-Dhaven.prefspec=architect`), kept apart from the game's.
 
 ## How it works

@@ -15,8 +15,31 @@
 
   <!-- Copies the built client jars. Deliberate: the planner only moves to a newer engine when you ask. -->
   <target name="sync-engine">
+    <!-- Only what the planner runs on (Windows): the client, its resource jars, and the GL/Vulkan toolkits.
+         The game's database, Steam and other platforms' natives are left out. -->
+    <delete>
+      <fileset dir="${engine.dir}" includes="*.jar"/>
+    </delete>
     <copy todir="${engine.dir}" overwrite="true">
-      <fileset dir="${nurgling.dir}/bin" includes="*.jar"/>
+      <fileset dir="${nurgling.dir}/bin">
+        <include name="hafen.jar"/>
+        <include name="builtin-res.jar"/>
+        <include name="hafen-res.jar"/>
+        <include name="nurgling-res.jar"/>
+        <include name="json-java.jar"/>
+        <include name="jogl-all.jar"/>
+        <include name="jogl-all-natives-windows-amd64.jar"/>
+        <include name="gluegen-rt.jar"/>
+        <include name="gluegen-rt-natives-windows-amd64.jar"/>
+        <include name="lwjgl-fat.jar"/>
+        <include name="lwjgl-awt.jar"/>
+        <include name="lwjgl-opengl-fat.jar"/>
+        <include name="lwjgl-vulkan-*.jar"/>
+        <include name="lwjgl-shaderc-*.jar"/>
+        <include name="lwjgl-vma-*.jar"/>
+        <exclude name="*-natives-linux*.jar"/>
+        <exclude name="*-natives-macos*.jar"/>
+      </fileset>
     </copy>
     <exec executable="git" dir="${nurgling.dir}" outputproperty="engine.rev" failifexecutionfails="false">
       <arg line="rev-parse --short HEAD"/>
@@ -41,7 +64,7 @@
   </target>
 
   <target name="jar" depends="compile">
-    <jar destfile="build/architect.jar" basedir="build/classes">
+    <jar destfile="app/architect.jar" basedir="build/classes">
       <manifest>
         <attribute name="Main-Class" value="architect.Main"/>
         <attribute name="Class-Path" value="../engine/hafen.jar"/>
@@ -67,7 +90,7 @@
   </target>
 
   <target name="run" depends="jar">
-    <java jar="build/architect.jar" fork="true" dir=".">
+    <java jar="app/architect.jar" fork="true" dir=".">
       <jvmarg value="-Dsun.java2d.uiScale.enabled=false"/>
       <jvmarg value="-Dhaven.prefspec=architect"/>
       <jvmarg value="--add-exports=java.base/java.lang=ALL-UNNAMED"/>
@@ -77,6 +100,15 @@
       <jvmarg value="-Xss8m"/>
       <jvmarg value="-Xmx4096m"/>
     </java>
+  </target>
+
+  <!-- The bundled Java (runtime/), so the planner runs on PCs without Java. Needs a JDK 21 with jlink. -->
+  <target name="runtime">
+    <delete dir="runtime"/>
+    <exec executable="jlink" failonerror="true">
+      <arg line="--add-modules java.base,java.desktop,java.datatransfer,java.prefs,java.logging,java.management,java.naming,java.net.http,java.scripting,java.sql,java.xml,jdk.unsupported,jdk.crypto.ec,jdk.zipfs,jdk.charsets"/>
+      <arg line="--strip-debug --no-header-files --no-man-pages --compress=zip-9 --output runtime"/>
+    </exec>
   </target>
 
   <target name="clean">

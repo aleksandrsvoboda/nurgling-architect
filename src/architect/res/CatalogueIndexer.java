@@ -42,19 +42,25 @@ public class CatalogueIndexer {
     }
 
     private final Path gameData, resJar, indexFile;
+    private final PackSource pack;
     private final Consumer<String> progress;
 
-    public CatalogueIndexer(Path gameData, Path resJar, Path home, Consumer<String> progress) {
+    public CatalogueIndexer(Path gameData, Path resJar, PackSource pack, Path home, Consumer<String> progress) {
         this.gameData = gameData;
+        this.pack = pack;
         this.resJar = resJar;
         this.indexFile = home.resolve("catalogue.json");
         this.progress = progress;
     }
 
     private String fingerprint() throws IOException {
-        long dm = Files.isDirectory(gameData) ? Files.getLastModifiedTime(gameData).toMillis() : 0;
+        long dm = (gameData != null && Files.isDirectory(gameData)) ? Files.getLastModifiedTime(gameData).toMillis() : 0;
         long js = (resJar != null && Files.exists(resJar)) ? Files.size(resJar) : 0;
-        return(FORMAT + ":" + dm + ":" + js);
+        long ps = 0;
+        if(pack != null)
+            for(java.util.jar.JarFile j : pack.jars)
+                ps += new java.io.File(j.getName()).length();
+        return(FORMAT + ":" + dm + ":" + js + ":" + ps);
     }
 
     public Catalogue load() throws IOException {
@@ -123,7 +129,17 @@ public class CatalogueIndexer {
                 }
             }
         }
-        if(Files.isDirectory(gameData)) {
+        if(pack != null && !pack.empty()) {
+            progress.accept("Reading the planner's art pack...");
+            for(String name : pack.names()) {
+                if(!wanted(name) || ret.containsKey(name))
+                    continue;
+                Raw r = read(name, pack.read(name));
+                if(r != null)
+                    ret.put(name, r);
+            }
+        }
+        if(gameData != null && Files.isDirectory(gameData)) {
             List<Path> files;
             try(Stream<Path> s = Files.list(gameData)) {
                 files = s.collect(Collectors.toList());

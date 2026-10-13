@@ -25,6 +25,10 @@ public class ArchitectEnv {
     /** The game's local dir (parent of data/): your area presets live here. Read only. */
     public static Path gameRoot;
     public static ReadOnlyGameCache resCache;
+    /** The planner's folder (the clone): pack/, engine/, runtime/ live here. */
+    public static Path root;
+    /** Game art shipped with the planner; empty when no pack was built. */
+    public static architect.res.PackSource pack;
 
     public static void init() {
         String appdata = System.getenv("APPDATA");
@@ -39,13 +43,25 @@ public class ArchitectEnv {
         }
         setLocaldir(home);
 
-        resCache = new ReadOnlyGameCache(gameData, RES_CACHE_ID);
-        Resource.setcache(resCache);
+        root = findroot();
+        /* The pack makes the planner work without the game; the game's cache, if this machine has
+         * one, is read too (never written) for anything newer or missing from the pack. */
+        if(Files.isDirectory(gameData)) {
+            resCache = new ReadOnlyGameCache(gameData, RES_CACHE_ID);
+            Resource.setcache(resCache);
+        }
+        try {
+            pack = new architect.res.PackSource(root.resolve("pack"));
+        } catch(java.io.IOException e) {
+            throw(new RuntimeException("cannot open the planner's art pack in " + root.resolve("pack"), e));
+        }
+        if(!pack.empty())
+            Resource.remote().add(pack);
 
         MainFrame.config = new NConfig();
         MainFrame.config.read();
         plannerDefaults();
-        System.out.println("[architect] home=" + home + " gamedata=" + gameData + (Files.isDirectory(gameData) ? "" : " (MISSING)"));
+        System.out.println("[architect] home=" + home + " root=" + root + " pack=" + pack + " gamecache=" + (resCache != null ? gameData : "none"));
     }
 
     /**
@@ -59,6 +75,20 @@ public class ArchitectEnv {
         NConfig.set(NConfig.Key.hideConf, hide);
         /* DRAG mode (the UI-layout drag menu) swallows every click on the map, camera drags included. */
         NConfig.set(NConfig.Key.show_drag_menu, false);
+    }
+
+    /** The planner's folder: the one holding app/ (or -Darchitect.root). */
+    private static Path findroot() {
+        String r = System.getProperty("architect.root");
+        if(r != null)
+            return(Paths.get(r));
+        try {
+            Path jar = Paths.get(ArchitectEnv.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            /* app/architect.jar, or build/classes when run from the build tree: the folder above either */
+            return(jar.getParent().getParent());
+        } catch(java.net.URISyntaxException | SecurityException e) {
+            return(Paths.get(".").toAbsolutePath());
+        }
     }
 
     /** hafen-res.jar next to the engine's hafen.jar: bundled base resources and the lib/* code libraries. */

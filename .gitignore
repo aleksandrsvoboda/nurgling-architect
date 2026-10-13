@@ -1,5 +1,3 @@
-/engine/*.jar
-/engine/*.properties
 /build/
 /dist/
 *.class

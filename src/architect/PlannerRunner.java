@@ -328,7 +328,7 @@ public class PlannerRunner implements UI.Runner {
             savedtseq = terrain.seq;
         Thread indexer = new HackThread(() -> {
             try {
-                catalogue = new CatalogueIndexer(ArchitectEnv.gameData, ArchitectEnv.resJar(), ArchitectEnv.home, s -> progress = s).load();
+                catalogue = new CatalogueIndexer(ArchitectEnv.gameData, ArchitectEnv.resJar(), ArchitectEnv.pack, ArchitectEnv.home, s -> progress = s).load();
             } catch(IOException e) {
                 progress = "Could not index objects: " + e.getMessage();
                 new Warning(e, "catalogue indexing failed").issue();
