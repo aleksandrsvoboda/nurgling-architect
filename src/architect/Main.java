@@ -25,7 +25,7 @@ public class Main {
             }
         }
         Client cl = new Client(Toolkit.instance());
-        cl.wnd.title("Nurgling Architect");
+        cl.wnd.title("Nurgling Architect " + ArchitectEnv.VERSION);
         try {
             cl.run(first);
         } finally {

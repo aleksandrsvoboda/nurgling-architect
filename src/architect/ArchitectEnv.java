@@ -22,6 +22,9 @@ public class ArchitectEnv {
     /** Where the game client downloads resources from (haven.resurl in the client's config). */
     public static final URI RESURL = URI.create(System.getProperty("architect.resurl", "https://game.havenandhearth.com/res/"));
 
+    /** This build's version (VERSION, stamped into the jar), or "dev" when run from a build tree without it. */
+    public static final String VERSION = version();
+
     public static Path home;
     /** The game's local folder, if this PC has the game: only your area presets are read from it. */
     public static Path gameRoot;
@@ -72,6 +75,14 @@ public class ArchitectEnv {
     }
 
     /** The planner's folder: the one holding app/ (or -Darchitect.root). */
+    private static String version() {
+        try(java.io.InputStream in = ArchitectEnv.class.getResourceAsStream("/architect/VERSION")) {
+            return((in == null) ? "dev" : new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).strip());
+        } catch(java.io.IOException e) {
+            return("dev");
+        }
+    }
+
     private static Path findroot() {
         String r = System.getProperty("architect.root");
         if(r != null)

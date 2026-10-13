@@ -277,7 +277,9 @@ public class StartScreen implements UI.Runner {
             g.chcolor(NStyle.infoBg);
             g.frect(Coord.z, sz);
             g.chcolor();
-            g.image(text("Nurgling Architect", big, NStyle.border), Coord.of(UI.scale(24), UI.scale(18)));
+            Tex tt = text("Nurgling Architect", big, NStyle.border);
+            g.image(tt, Coord.of(UI.scale(24), UI.scale(18)));
+            g.image(text(ArchitectEnv.VERSION, small, DIM), Coord.of(UI.scale(32) + tt.sz().x, UI.scale(18) + tt.sz().y - UI.scale(16)));
             g.image(text("Base planner. Plan on a generated world or a flat sandbox. No game install or login needed.", fnd, DIM),
                     Coord.of(UI.scale(24), UI.scale(50)));
             g.image(text("Your plans", head, Color.WHITE), planlist.c.sub(0, UI.scale(22)));

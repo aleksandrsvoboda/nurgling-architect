@@ -8,7 +8,11 @@ You plan on a **generated world** (from a seed, in one of five styles) or a **fl
 - plan nurgling areas and export them as an area preset;
 - reshape and pave the ground; this is visual only.
 
-## Run it
+## Install it
+
+The easiest way is from the **Nurgling updater**: open **Apps**, then **Install** on Nurgling Architect. The updater keeps it up to date, starts it on Nurgling's own Java, and can uninstall it again (your plans and downloaded art stay).
+
+## Run it from a clone
 
 Clone and double-click **`run.bat`** (Windows). That's all:
 - `runtime/`: a bundled Java 21, so nothing else needs installing.
@@ -26,6 +30,7 @@ ant jar           # app/architect.jar
 ant test          # plain-main tests
 ant sync-engine   # refresh engine/ from ../nurgling2/bin (pinned; only when you choose)
 ant runtime       # rebuild the bundled Java in runtime/ with jlink
+ant dist          # dist/NurglingArchitect-<VERSION>.zip, what the updater installs (no runtime/)
 java -cp app/architect.jar architect.DevTools catalogue [gamedata]  # rebuild the shipped catalogue from a game cache,
                                                                     # probing the server for unseen build-menu objects
 java -cp app/architect.jar architect.DevTools prefetch   # download everything into the planner's cache
@@ -44,6 +49,12 @@ Dev helpers:
 - `tools/histo.ps1`: heap histogram.
 - `tools/shot.ps1` and `tools/front.ps1`: take a screenshot; bring the window to the front.
 - `java -cp app/architect.jar architect.DevTools gen` and `probe <res>`: generator previews as PNG; inspect one server resource.
+
+## Releasing
+
+Bump `VERSION`, commit, and push a tag `v<VERSION>`. The Release workflow builds and tests on Windows, then publishes `NurglingArchitect-<VERSION>.zip` as a GitHub release. The zip holds `app/`, `engine/` and `app.json`, which tells the updater how to start the planner (main jar, minimum Java, JVM flags, heap).
+
+Players get a new version with the next Nurgling release: its release step pins the newest Architect release (by the sha256 GitHub records for the file) into the signed update manifest.
 
 ## Where things live
 

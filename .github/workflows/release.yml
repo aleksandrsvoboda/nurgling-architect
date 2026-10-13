@@ -1,0 +1,53 @@
+# Push a tag v<VERSION> (e.g. v1.0.0) to publish NurglingArchitect-<VERSION>.zip as a GitHub release.
+# The Nurgling updater installs that zip from its Apps panel: nurgling2's release step pins the newest
+# release by the sha256 digest GitHub records for the file.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Check the tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          if ("v$v" -ne "${{ github.ref_name }}") { throw "tag ${{ github.ref_name }} but VERSION is $v" }
+
+      - name: Build, test, package
+        shell: pwsh
+        run: |
+          ant -version
+          ant jar test dist
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          gh release create "${{ github.ref_name }}" "dist/NurglingArchitect-$v.zip" --title "Nurgling Architect $v" --notes "Install it from the Nurgling updater: Apps, then Nurgling Architect."
+
+      - name: Keep the zip (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: NurglingArchitect
+          path: dist/*.zip

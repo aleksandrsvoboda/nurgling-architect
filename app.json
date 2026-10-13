@@ -1,0 +1,14 @@
+{
+  "main": "app/architect.jar",
+  "minJava": 21,
+  "jvm": [
+    "-Dsun.java2d.uiScale.enabled=false",
+    "-Dhaven.prefspec=architect",
+    "--add-exports=java.base/java.lang=ALL-UNNAMED",
+    "--add-exports=java.desktop/sun.awt=ALL-UNNAMED",
+    "--add-exports=java.desktop/sun.java2d=ALL-UNNAMED",
+    "--enable-native-access=ALL-UNNAMED",
+    "-Xss8m"
+  ],
+  "heap": { "min": "1024m", "max": "4096m" }
+}

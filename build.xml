@@ -3,6 +3,7 @@
 <project name="nurgling-architect" default="jar">
   <property name="nurgling.dir" value="../nurgling2"/>
   <property name="engine.dir" value="engine"/>
+  <loadfile property="version" srcfile="VERSION"><filterchain><striplinebreaks/></filterchain></loadfile>
 
   <path id="engine.cp">
     <fileset dir="${engine.dir}" includes="*.jar"/>
@@ -58,6 +59,7 @@
       <fileset dir="src" excludes="**/*.java"/>
       <fileset dir="${engine.dir}" includes="ENGINE_VERSION"/>
     </copy>
+    <copy file="VERSION" todir="build/classes/architect" overwrite="true"/>
   </target>
 
   <target name="jar" depends="compile">
@@ -69,6 +71,19 @@
         <attribute name="Enable-Native-Access" value="ALL-UNNAMED"/>
       </manifest>
     </jar>
+  </target>
+
+  <!-- The release zip the Nurgling updater installs: the planner, its engine and app.json (how to start it).
+       No runtime/: the updater starts it on Nurgling's own bundled Java. -->
+  <target name="dist" depends="jar">
+    <mkdir dir="dist"/>
+    <delete file="dist/NurglingArchitect-${version}.zip"/>
+    <zip destfile="dist/NurglingArchitect-${version}.zip" level="9">
+      <zipfileset dir="app" includes="architect.jar" prefix="app"/>
+      <zipfileset dir="${engine.dir}" prefix="engine"/>
+      <fileset dir="." includes="app.json,run.bat,README.md,VERSION"/>
+    </zip>
+    <echo message="dist/NurglingArchitect-${version}.zip"/>
   </target>
 
   <target name="test-compile" depends="compile">
