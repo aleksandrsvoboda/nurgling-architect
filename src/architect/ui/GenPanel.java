@@ -9,17 +9,17 @@ import java.awt.image.BufferedImage;
 import java.util.*;
 
 /**
- * Start screen's "Generate a new world" options: style, seed and forests, with a top-down preview that
+ * Start screen's "Generate a new world" options: style, seed and whether to plant trees, with a top-down preview that
  * redraws in the background whenever an option changes.
  */
 public class GenPanel extends Widget {
     public WorldGen.Style style = WorldGen.Style.HILLS;
     public long seed = new Random().nextInt(1000000);
-    public boolean trees = true;
+    /** Plant forests as tree objects on their own layer. Off by default: thousands of trees are heavy to plan around. */
+    public boolean trees = false;
     public int size = 10;
     private final Map<WorldGen.Style, Button> sbtn = new EnumMap<>(WorldGen.Style.class);
     private final TextEntry seedin;
-    private final Button treesb;
     private volatile BufferedImage img = null;
     private volatile String key = null;
     private Tex tex = null;
@@ -28,7 +28,6 @@ public class GenPanel extends Widget {
     private final Map<String, Color> tilecol = new HashMap<>();
     private final Text.Foundry fnd = new Text.Foundry(Text.sans, 12).aa(true);
     private Tex seedlbl = null;
-    private boolean lasttrees = false;
 
     public GenPanel(Coord sz) {
         super(sz);
@@ -52,7 +51,7 @@ public class GenPanel extends Widget {
             seed = new Random().nextInt(1000000);
             seedin.settext(Long.toString(seed));
         }), UI.scale(172), y);
-        treesb = add(new Button(UI.scale(150), "", false, () -> trees = !trees), UI.scale(272), y);
+        add(new CheckBox("Generate trees").state(() -> trees).changed(v -> trees = v), UI.scale(276), y + UI.scale(5));
     }
 
     public WorldGen make() {
@@ -118,10 +117,6 @@ public class GenPanel extends Widget {
             }, "Architect gen preview");
             worker.setDaemon(true);
             worker.start();
-        }
-        if(treesb.text == null || lasttrees != trees) {
-            lasttrees = trees;
-            treesb.change(trees ? "Forests: with trees" : "Forests: no trees");
         }
         super.tick(dt);
     }
