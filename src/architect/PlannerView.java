@@ -36,7 +36,9 @@ public class PlannerView extends MapView {
     /** Set by the runner once the terrain store exists. */
     public TerrainTool terrain = null;
     public final PlayMode play;
-    public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 8;
+    public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 5;
+    /** Grass and flowers (flavour objects) only this many cuts around the camera; bare ground reaches further. */
+    public static final int FLAVVIEW = 3;
     /** Resource being placed, or null. */
     private String placingres = null;
     private boolean placeready = false;
@@ -67,7 +69,8 @@ public class PlannerView extends MapView {
             boundul = boundbr = null;
         }
         camera = new OrbitCam();
-        setview(DEFVIEW);
+        setview(Integer.getInteger("architect.view", DEFVIEW));
+        super.terrain.flavview = Integer.getInteger("architect.flavview", FLAVVIEW);
     }
 
     /** Grids the map server must keep around the viewer for the current view distance. */

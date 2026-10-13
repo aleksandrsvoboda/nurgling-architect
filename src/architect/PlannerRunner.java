@@ -330,6 +330,11 @@ public class PlannerRunner implements UI.Runner {
                     setfocus(view);
                 }), 0, toolbar.sz.y);
             }
+            if(autoplayed && autoplay > 0 && Boolean.getBoolean("architect.autostop") && Utils.rtime() > autoplay + 5 && view.play.on) {
+                System.out.println("[play] autostop");
+                view.play.stop();
+                System.out.println("[play] stopped");
+            }
             if(autoplay > 0 && !autoplayed && Utils.rtime() > autoplay) {
                 autoplayed = true;
                 view.play.start(view.cc);

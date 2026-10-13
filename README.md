@@ -34,7 +34,8 @@ java -cp app/architect.jar architect.DevTools prefetch   # download everything i
 The engine needs nurgling's `feat/mapraster-owner-center` changes:
 - terrain drawing without the in-game interface;
 - `MapView.setview`;
-- shadow lookups outside the shadow box count as lit.
+- shadow lookups outside the shadow box count as lit;
+- an optional decoration radius (`Terrain.flavview`), so grass and flowers stay near the camera.
 
 Dev helpers:
 - `tools/launch.ps1`: start detached, with logs in `build/out.log` and `build/err.log`.

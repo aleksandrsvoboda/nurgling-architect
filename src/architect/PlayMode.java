@@ -156,8 +156,13 @@ public class PlayMode {
             comp = null;
             stride = null;
         }
-        if(g != null)
+        if(g != null) {
+            /* Drop the movement attribute first: Gob.removed() iterates the attributes and nurgling's hook
+             * for a removed Moving changes that same map (ConcurrentModificationException, dead UI thread).
+             * Server characters always stop moving before they leave, so the game never hits this. */
+            g.delattr(Moving.class);
             mv.glob.oc.remove(g);
+        }
         if(prevcam != null)
             mv.camera = prevcam;
         if(prevcc != null)
@@ -253,7 +258,7 @@ public class PlayMode {
             st.v = moved;
         if(Boolean.getBoolean("architect.debugplay") && (Utils.rtime() - lastdebug) > 0.5) {
             lastdebug = Utils.rtime();
-            System.out.printf("[play] pos %s v %.1f pose %s speed %d%n", pos, moved, pose, speed);
+            System.out.printf("[play] pos %s v %.1f pose %s speed %d fps %d%n", pos, moved, pose, speed, nurgling.NUtils.getFps());
         }
         Gob g = gob;
         if(g != null)
