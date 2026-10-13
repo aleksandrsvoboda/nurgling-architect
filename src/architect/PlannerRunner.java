@@ -278,6 +278,7 @@ public class PlannerRunner implements UI.Runner {
         final Speedget speeds;
         final TerrainPanel terrainpanel;
         final WallBar wallbar;
+        final RenderAudit audit;
 
         Screen(Coord sz) {
             super(sz);
@@ -308,6 +309,7 @@ public class PlannerRunner implements UI.Runner {
                 setfocus(view);
             }), 0, 0);
             wallbar.hide();
+            audit = Boolean.getBoolean("architect.renderaudit") ? new RenderAudit(view) : null;
         }
 
         int sideh() {
@@ -392,9 +394,11 @@ public class PlannerRunner implements UI.Runner {
                 wallbar.c = Coord.of((sz.x - wallbar.sz.x) / 2, toolbar.sz.y + UI.scale(8));
             }
             Catalogue cat = catalogue;
+            if(audit != null)
+                audit.tick(cat);
             if(panel == null && cat != null) {
                 panel = add(new CataloguePanel(cat, sideh(), e -> {
-                    view.place(e.res);
+                    view.place(e.res, e.sdt);
                     setfocus(view);
                 }), 0, toolbar.sz.y);
             }

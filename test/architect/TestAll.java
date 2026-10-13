@@ -174,6 +174,19 @@ public class TestAll {
         check(lead != null && lead.add.stream().anyMatch(o -> o.res.equals(k.res(Walls.Piece.POST)) && Walls.tile(o.rc).equals(Coord.of(2, 6))), "big gate off a post: second post 4 tiles on");
     }
 
+    /** Build entries reach their real models; internal pieces stay out of the object list. */
+    static void catalogue() throws Exception {
+        architect.res.Catalogue c = architect.res.Catalogue.shipped();
+        architect.res.Catalogue.Entry tent = c.build.stream().filter(e -> "paginae/bld/primtent".equals(e.pagina)).findFirst().orElse(null);
+        check(tent != null && "gfx/terobjs/arch/primitivetent".equals(tent.res), "primitive tent resolves");
+        architect.res.Catalogue.Entry cc = c.build.stream().filter(e -> "paginae/bld/ccauldron".equals(e.pagina)).findFirst().orElse(null);
+        check(cc != null && "gfx/terobjs/cauldron".equals(cc.res) && cc.sdt.length == 4 && cc.sdt[1] == 0x04, "clay cauldron is the cauldron's clay variant");
+        check(c.objects.stream().noneMatch(e -> e.res.equals("gfx/terobjs/arch/cpext") || e.res.startsWith("gfx/terobjs/mm/") || e.res.equals("gfx/terobjs/bumlings/bumling0")), "internal pieces hidden");
+        check(c.objects.stream().anyMatch(e -> e.res.equals("gfx/terobjs/dframe")) || c.objects.stream().noneMatch(e -> e.res.startsWith("gfx/terobjs/dframe")), "drying frame itself kept");
+        long grey = c.build.stream().filter(e -> !e.placeable()).count();
+        check(grey == 2, "only Tinker's tools stay unplaceable (" + grey + ")");
+    }
+
     public static void main(String[] args) throws Exception {
         /* Same isolated setup as the app, in a throwaway home: engine code reads nurgling config. */
         System.setProperty("architect.home", Files.createTempDirectory("architect-test").toString());
@@ -184,6 +197,7 @@ public class TestAll {
         overlap();
         terrain();
         walls();
+        catalogue();
         System.out.println(passes + " passed, " + fails + " failed");
         System.exit(fails == 0 ? 0 : 1);
     }

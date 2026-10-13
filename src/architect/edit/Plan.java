@@ -492,7 +492,10 @@ public class Plan {
             }
             /* Unique (virtual) ids: OCache keys objects by id; with a shared id it ticks and removes only one. */
             Gob g = glob.oc.new Virtual(o.rc, o.a);
-            g.setattr(new ResDrawable(g, res, new MessageBuf(o.sdt)));
+            ResDrawable d = Looks.drawable(g, res.get(), o.sdt);
+            if(d == null)
+                return;
+            g.setattr(d);
             g.move(o.rc, o.a);
             synchronized(Plan.this) {
                 if(objs.get(o.id) != o)

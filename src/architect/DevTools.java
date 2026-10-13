@@ -76,10 +76,42 @@ public class DevTools {
                 sb.append(String.format("  model x %.1f..%.1f y %.1f..%.1f z %.1f..%.1f%n", mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]));
                 System.out.print(sb);
             }
+        } else if(cmd.equals("audit")) {
+            /* how each placeable object would draw without the state data the server sends */
+            Catalogue cat = Catalogue.shipped();
+            java.util.Set<String> seen = new java.util.TreeSet<>();
+            for(Catalogue.Entry e : cat.build) if(e.res != null) seen.add(e.res);
+            for(Catalogue.Entry e : cat.objects) if(!e.res.startsWith("gfx/terobjs/items/")) seen.add(e.res);
+            java.util.Map<String, Integer> tally = new java.util.TreeMap<>();
+            for(String r : seen) {
+                String kind;
+                try {
+                    haven.Resource res = haven.Resource.remote().loadwait(r);
+                    boolean code = !res.layers(haven.Resource.CodeEntry.class).isEmpty();
+                    java.util.Collection<haven.FastMesh.MeshRes> ms = res.layers(haven.FastMesh.MeshRes.class);
+                    boolean skel = !res.layers(haven.Skeleton.Res.class).isEmpty();
+                    boolean any = ms.stream().anyMatch(m -> m.id < 0);
+                    kind = ms.isEmpty() ? (code ? "code-nomesh" : "nomesh") : code ? (any ? "code" : "code-allids") : skel ? "skel" : (any ? "ok" : "allids");
+                    if(!kind.equals("ok"))
+                        System.out.println(kind + " " + r + " ids=" + ms.stream().map(m -> m.id).collect(java.util.stream.Collectors.toList()));
+                } catch(RuntimeException ex) {
+                    kind = "error";
+                    System.out.println("error " + r + " " + ex);
+                }
+                tally.merge(kind, 1, Integer::sum);
+            }
+            System.out.println(tally);
+        } else if(cmd.equals("exists")) {
+            /* which of several resource names the game's server has */
+            CatalogueIndexer ix = new CatalogueIndexer(null, null, ArchitectEnv.RESURL, s -> {});
+            for(int i = 1; i < args.length; i++)
+                System.out.println(((ix.fetch(args[i]) != null) ? "YES " : "no  ") + args[i]);
         } else if(cmd.equals("probe")) {
             byte[] b = new CatalogueIndexer(null, null, ArchitectEnv.RESURL, System.out::println).fetch(args[1]);
             ResFile f = (b == null) ? null : ResFile.parse(b);
             System.out.println(args[1] + ": " + ((b == null) ? "404" : b.length + " bytes, layers " + ((f == null) ? "unparseable" : f.names)));
+            if(f != null && f.has("pagina"))
+                System.out.println("  pagina: " + new String(f.layer("pagina"), java.nio.charset.StandardCharsets.UTF_8).replaceAll("[^\\x20-\\x7e]", " "));
             if(f != null && f.action() != null)
                 System.out.println("  action: " + java.util.Arrays.toString(f.action().ad));
         } else if(cmd.equals("gen"))

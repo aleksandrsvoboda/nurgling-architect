@@ -43,6 +43,7 @@ public class PlannerView extends MapView {
     public static final int FLAVVIEW = 3;
     /** Resource being placed, or null. */
     private String placingres = null;
+    private byte[] placingsdt = new byte[0];
     private boolean placeready = false;
     /* Line/array placing: where the drag began, and the ghosts previewing the row. */
     private Coord linepress = null;
@@ -210,6 +211,11 @@ public class PlannerView extends MapView {
 
     /** Starts placing res; the ghost follows the cursor until cancelled. Keeps the previous angle. */
     public void place(String res) {
+        place(res, null);
+    }
+
+    /** As place(res), drawn and planned with state data sdt (which variant of a shared model). */
+    public void place(String res, byte[] sdt) {
         double a = 0;
         Plob cur = plob();
         if(cur != null)
@@ -223,9 +229,22 @@ public class PlannerView extends MapView {
         double angle = a;
         Indir<Resource> r = Resource.remote().load(res);
         placingres = res;
+        placingsdt = (sdt == null) ? new byte[0] : sdt;
         placeready = false;
         this.placing = glob.loader.defer(() -> {
-            Plob p = createPlob(r, Message.nil);
+            Resource rr = r.get();
+            if(Looks.broken(res))
+                return(null);
+            Plob p;
+            try {
+                p = createPlob(r, Looks.of(glob, cc, rr, placingsdt));
+            } catch(Loading l) {
+                throw(l);
+            } catch(RuntimeException e) {
+                /* its sprite needs server data; see Looks.drawable */
+                System.out.println("[architect] cannot place " + res + ": " + e);
+                return(null);
+            }
             p.adjust = new PlannerPlace();
             p.a = angle;
             p.place();
@@ -253,7 +272,7 @@ public class PlannerView extends MapView {
         Plob p = plob();
         if(p == null || !placeready || placingres == null)
             return;
-        plan.add(new PlanObject(placingres, null, p.rc, p.a));
+        plan.add(new PlanObject(placingres, placingsdt, p.rc, p.a));
     }
 
     /** Positions for a row from a to b (or a filled rectangle), spaced so footprints touch. */
@@ -285,7 +304,7 @@ public class PlannerView extends MapView {
     private void showpreview(List<Coord2d> pos, double ang) {
         List<PlanObject> objs = new ArrayList<>();
         for(Coord2d p : pos)
-            objs.add(new PlanObject(placingres, null, p, ang));
+            objs.add(new PlanObject(placingres, placingsdt, p, ang));
         showpreview(objs);
     }
 
@@ -315,7 +334,10 @@ public class PlannerView extends MapView {
                 /* Unique (virtual) ids: OCache keys objects by id, so a shared id hides all but one. */
                 Gob g = glob.oc.new Virtual(o.rc, o.a);
                 g.setattr(new nurgling.GhostAlpha(g));
-                g.setattr(new ResDrawable(g, res.get(o.res)));
+                ResDrawable d = Looks.drawable(g, res.get(o.res), o.sdt);
+                if(d == null)
+                    break;
+                g.setattr(d);
                 glob.oc.add(g);
                 preview.add(g);
                 previewres.add(o.res);
@@ -408,7 +430,7 @@ public class PlannerView extends MapView {
             plan.begin(linepos.size() > 1 ? "Place " + linepos.size() : "Place");
             try {
                 for(Coord2d pos : linepos)
-                    plan.add(new PlanObject(placingres, null, pos, p.a));
+                    plan.add(new PlanObject(placingres, placingsdt, pos, p.a));
             } finally {
                 plan.commit();
             }
