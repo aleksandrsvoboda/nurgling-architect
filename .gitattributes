@@ -8,3 +8,4 @@
 *.dll binary
 *.exe binary
 runtime/** binary
+*.patch -text
