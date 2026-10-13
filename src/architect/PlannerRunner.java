@@ -180,6 +180,18 @@ public class PlannerRunner implements UI.Runner {
                     {"Save (Ctrl+S)", (Runnable)() -> {if(save()) msg("Saved");}},
                     {"Undo", (Runnable)() -> plan.undo()},
                     {"Redo", (Runnable)() -> plan.redo()},
+                    {"Play", (Runnable)() -> {
+                        if(view.play.on) {
+                            view.play.stop();
+                        } else {
+                            view.cancelplace();
+                            view.areas.on = false;
+                            view.areas.cancelstamp();
+                            view.terrain.on = false;
+                            view.sel.clear();
+                            view.play.start(view.cc);
+                        }
+                    }},
                     {"Areas", (Runnable)() -> {view.areas.on = !view.areas.on; if(view.areas.on) {view.cancelplace(); view.terrain.on = false;} else view.areas.cancelstamp();}},
                     {"Terrain", (Runnable)() -> {view.terrain.on = !view.terrain.on; if(view.terrain.on) {view.cancelplace(); view.areas.on = false; view.areas.cancelstamp();}}},
                     {"Collisions on/off", (Runnable)() -> {view.collisions.toggle(); msg("Collision check " + (view.collisions.enabled ? "on" : "off"));}},
@@ -248,6 +260,8 @@ public class PlannerRunner implements UI.Runner {
         String righttext() {
             if(catalogue == null)
                 return(progress);
+            if(view.play.on)
+                return("Play mode   Click: walk there   WASD: move   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back to planning");
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
@@ -267,6 +281,9 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
+        /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
+        private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
+        private boolean autoplayed = false;
 
         public void tick(double dt) {
             if(parent != null && !sz.equals(parent.sz)) {
@@ -276,6 +293,13 @@ public class PlannerRunner implements UI.Runner {
             if(areapanel.visible != view.areas.on) {
                 areapanel.show(view.areas.on);
                 areapanel.c = Coord.of((sz.x - AreaPanel.W) / 2, toolbar.sz.y + UI.scale(8));
+            }
+            /* Play mode is just you and the world: the planning panels step aside. */
+            boolean planning = !view.play.on;
+            if(layers.visible != planning) {
+                layers.show(planning);
+                if(panel != null)
+                    panel.show(planning);
             }
             if(terrainpanel.visible != view.terrain.on) {
                 terrainpanel.show(view.terrain.on);
@@ -287,6 +311,11 @@ public class PlannerRunner implements UI.Runner {
                     view.place(e.res);
                     setfocus(view);
                 }), 0, toolbar.sz.y);
+            }
+            if(autoplay > 0 && !autoplayed && Utils.rtime() > autoplay) {
+                autoplayed = true;
+                view.play.start(view.cc);
+                view.play.walkto(view.cc.add(400, 60));
             }
             if(Utils.rtime() - lastsave > AUTOSAVE) {
                 lastsave = Utils.rtime();

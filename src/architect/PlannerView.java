@@ -35,6 +35,7 @@ public class PlannerView extends MapView {
     public final AreaTool areas;
     /** Set by the runner once the terrain store exists. */
     public TerrainTool terrain = null;
+    public final PlayMode play;
     public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 8;
     /** Resource being placed, or null. */
     private String placingres = null;
@@ -57,6 +58,7 @@ public class PlannerView extends MapView {
         this.edit = new EditTool(this);
         this.collisions = new Collisions(plan);
         this.areas = new AreaTool(this);
+        this.play = new PlayMode(this);
         if(gridbounds != null) {
             Coord2d gsz = MCache.tilesz.mul(Coord2d.of(MCache.cmaps));
             boundul = gsz.mul(Coord2d.of(gridbounds.ul));
@@ -137,6 +139,11 @@ public class PlannerView extends MapView {
         return(Coord2d.of(-Math.cos(a), Math.sin(a)));
     }
 
+    /** Whether a world position is inside the plannable world. */
+    public boolean inbounds(Coord2d p) {
+        return(boundul == null || (p.x >= boundul.x && p.y >= boundul.y && p.x <= boundbr.x && p.y <= boundbr.y));
+    }
+
     private void move(double fwd, double right) {
         Coord2d f = forward(), r = Coord2d.of(-f.y, f.x);
         Coord2d nc = cc.add(f.mul(fwd)).add(r.mul(right));
@@ -170,6 +177,7 @@ public class PlannerView extends MapView {
         areas.on = false;
         if(terrain != null)
             terrain.on = false;
+        play.stop();
         double angle = a;
         Indir<Resource> r = Resource.remote().load(res);
         placingres = res;
@@ -323,7 +331,10 @@ public class PlannerView extends MapView {
     protected void initload(double time) {}
 
     public void tick(double dt) {
-        keypan(dt);
+        if(play.on)
+            play.tick(dt);
+        else
+            keypan(dt);
         plan.tick();
         if(terrain != null)
             terrain.tick();
@@ -358,6 +369,24 @@ public class PlannerView extends MapView {
 
     public boolean mousedown(MouseDownEvent ev) {
         parent.setfocus(this);
+        if(play.on) {
+            if(ev.b == 1) {
+                new Maptest(ev.c) {
+                    protected void hit(Coord pc, Coord2d mc) {
+                        play.walkto(mc);
+                    }
+                }.run();
+                return(true);
+            }
+            /* Right or middle drag turns the game camera, as in the game. */
+            if(drag == null) {
+                dragb = 3;
+                dragc = dragstart = ev.c;
+                camera.click(ev.c);
+                drag = ui.grabmouse(this);
+            }
+            return(true);
+        }
         if(ev.b == 1) {
             if(plob() != null) {
                 if(placeready) {
@@ -441,6 +470,11 @@ public class PlannerView extends MapView {
     }
 
     public boolean keydown(KeyDownEvent ev) {
+        if(play.on) {
+            if(play.keydown(ev))
+                return(true);
+            return(super.keydown(ev));
+        }
         fast = (ev.mods & KeyMatch.S) != 0;
         boolean ctrl = (ev.mods & KeyMatch.C) != 0;
         if(!ctrl) {
@@ -480,6 +514,8 @@ public class PlannerView extends MapView {
     }
 
     public boolean keyup(KeyUpEvent ev) {
+        if(play.on && play.keyup(ev))
+            return(true);
         fast = (ev.mods & KeyMatch.S) != 0;
         if(held.remove(ev.code))
             return(true);
@@ -489,6 +525,7 @@ public class PlannerView extends MapView {
     /* Keys held when focus leaves would otherwise keep panning forever. */
     public void lostfocus() {
         held.clear();
+        play.lostfocus();
         super.lostfocus();
     }
 }

@@ -21,7 +21,15 @@ public class DevTools {
             catalogue(args);
         else if(cmd.equals("prefetch"))
             prefetch();
-        else if(cmd.equals("probe")) {
+        else if(cmd.equals("layers")) {
+            for(int i = 1; i < args.length; i++) {
+                haven.Resource r = haven.Resource.remote().loadwait(args[i]);
+                java.util.Map<String, Integer> c = new java.util.TreeMap<>();
+                for(haven.Resource.Layer l : r.layers(haven.Resource.Layer.class))
+                    c.merge(l.getClass().getSimpleName(), 1, Integer::sum);
+                System.out.println(args[i] + ": " + c);
+            }
+        } else if(cmd.equals("probe")) {
             byte[] b = new CatalogueIndexer(null, null, ArchitectEnv.RESURL, System.out::println).fetch(args[1]);
             ResFile f = (b == null) ? null : ResFile.parse(b);
             System.out.println(args[1] + ": " + ((b == null) ? "404" : b.length + " bytes, layers " + ((f == null) ? "unparseable" : f.names)));
