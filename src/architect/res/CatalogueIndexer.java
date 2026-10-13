@@ -13,11 +13,13 @@ import java.util.jar.*;
 import java.util.stream.*;
 
 /**
- * Builds the {@link Catalogue} from what is on disk: the game cache (read-only) and the bundled hafen-res.jar.
+ * Maintainer tool behind {@code DevTools catalogue}: builds the shipped {@link Catalogue} (names only) from a
+ * game cache (read-only) and the bundled hafen-res.jar, then asks the game's resource server for the models of
+ * build-menu entries the cache never saw.
  *
- * The cache is addressed by hashed names, so finding "every object" means reading every file's header once
- * (~1 minute for ~60k files). The result is saved next to the planner settings and reused until the cache
- * directory changes.
+ * The cache is addressed by hashed names, so finding "every object" means reading every file's header once.
+ * The server cannot list its contents, so an unseen blueprint's model is found by trying its name in each
+ * object folder the cache knows (stonetower -> gfx/terobjs/arch/stonetower).
  */
 public class CatalogueIndexer {
     public static final int FORMAT = 2;
@@ -41,49 +43,105 @@ public class CatalogueIndexer {
         }
     }
 
-    private final Path gameData, resJar, indexFile;
-    private final PackSource pack;
+    private final Path gameData, resJar;
+    private final java.net.URI resurl;
     private final Consumer<String> progress;
 
-    public CatalogueIndexer(Path gameData, Path resJar, PackSource pack, Path home, Consumer<String> progress) {
+    public CatalogueIndexer(Path gameData, Path resJar, java.net.URI resurl, Consumer<String> progress) {
         this.gameData = gameData;
-        this.pack = pack;
         this.resJar = resJar;
-        this.indexFile = home.resolve("catalogue.json");
+        this.resurl = resurl;
         this.progress = progress;
     }
 
-    private String fingerprint() throws IOException {
-        long dm = (gameData != null && Files.isDirectory(gameData)) ? Files.getLastModifiedTime(gameData).toMillis() : 0;
-        long js = (resJar != null && Files.exists(resJar)) ? Files.size(resJar) : 0;
-        long ps = 0;
-        if(pack != null)
-            for(java.util.jar.JarFile j : pack.jars)
-                ps += new java.io.File(j.getName()).length();
-        return(FORMAT + ":" + dm + ":" + js + ":" + ps);
+    public Catalogue make() throws IOException {
+        Map<String, Raw> raw = scan();
+        if(resurl != null)
+            probe(raw);
+        return(build(raw));
     }
 
-    public Catalogue load() throws IOException {
-        String fp = fingerprint();
-        Map<String, Raw> raw = null;
-        if(Files.exists(indexFile)) {
+    /* ---------- the server ---------- */
+
+    /** A resource from the game's server, or null when it has no such resource. Retries dropped connections. */
+    public byte[] fetch(String name) throws IOException {
+        IOException last = null;
+        for(int attempt = 0; attempt < 5; attempt++) {
             try {
-                JSONObject o = new JSONObject(new String(Files.readAllBytes(indexFile), StandardCharsets.UTF_8));
-                if(fp.equals(o.optString("fingerprint")))
-                    raw = fromjson(o);
-            } catch(JSONException e) {
-                raw = null;
+                return(fetch1(name));
+            } catch(IOException e) {
+                /* The server resets connections under load; a reset is not an answer. */
+                last = e;
+                try {
+                    Thread.sleep(500L << attempt);
+                } catch(InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw(new InterruptedIOException("interrupted"));
+                }
             }
         }
-        if(raw == null) {
-            raw = scan();
-            JSONObject o = tojson(raw);
-            o.put("fingerprint", fp);
-            Path tmp = indexFile.resolveSibling(indexFile.getFileName() + ".tmp");
-            Files.write(tmp, o.toString().getBytes(StandardCharsets.UTF_8));
-            Files.move(tmp, indexFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        throw(last);
+    }
+
+    private byte[] fetch1(String name) throws IOException {
+        /* haven.Http carries the game client's own TLS trust for the resource server. */
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection)haven.Http.open(resurl.resolve(name + ".res").toURL());
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(30000);
+        int code = c.getResponseCode();
+        if(code == 404)
+            return(null);
+        if(code != 200)
+            throw(new IOException(name + ": HTTP " + code));
+        try(InputStream in = c.getInputStream()) {
+            return(in.readAllBytes());
         }
-        return(build(raw));
+    }
+
+    /** Finds the models of build-menu entries the cache never saw, trying every known object folder. */
+    void probe(Map<String, Raw> raw) throws IOException {
+        Map<String, List<String>> bybase = bases(raw);
+        Map<String, Integer> dirs = new HashMap<>();
+        for(String n : raw.keySet())
+            if(n.startsWith(OBJ))
+                dirs.merge(n.substring(0, n.lastIndexOf('/') + 1), 1, Integer::sum);
+        List<String> order = dirs.keySet().stream().sorted(Comparator.comparingInt((String d) -> -dirs.get(d))).collect(Collectors.toList());
+        List<Raw> missing = raw.values().stream().filter(r -> r.name.startsWith(BLD) && r.bp != null && objectFor(r.bp, bybase) == null).collect(Collectors.toList());
+        AtomicInteger done = new AtomicInteger(), found = new AtomicInteger();
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        List<Future<?>> jobs = new ArrayList<>();
+        for(Raw r : missing) {
+            jobs.add(pool.submit(() -> {
+                String base = RENAMES.getOrDefault(r.bp, r.bp);
+                for(String dir : order) {
+                    try {
+                        byte[] res = fetch(dir + base);
+                        if(res == null)
+                            continue;
+                        Raw got = read(dir + base, res);
+                        if(got != null && got.model) {
+                            synchronized(raw) {
+                                raw.put(got.name, got);
+                            }
+                            found.incrementAndGet();
+                            break;
+                        }
+                    } catch(IOException e) {
+                        progress.accept("  " + dir + base + ": " + e.getMessage());
+                    }
+                }
+                progress.accept(String.format("Probing the server for unseen objects... %d/%d (found %d)", done.incrementAndGet(), missing.size(), found.get()));
+                return(null);
+            }));
+        }
+        for(Future<?> f : jobs) {
+            try {
+                f.get();
+            } catch(InterruptedException | ExecutionException e) {
+                throw(new IOException("probing failed", e));
+            }
+        }
+        pool.shutdown();
     }
 
     /* ---------- scanning ---------- */
@@ -129,16 +187,6 @@ public class CatalogueIndexer {
                 }
             }
         }
-        if(pack != null && !pack.empty()) {
-            progress.accept("Reading the planner's art pack...");
-            for(String name : pack.names()) {
-                if(!wanted(name) || ret.containsKey(name))
-                    continue;
-                Raw r = read(name, pack.read(name));
-                if(r != null)
-                    ret.put(name, r);
-            }
-        }
         if(gameData != null && Files.isDirectory(gameData)) {
             List<Path> files;
             try(Stream<Path> s = Files.list(gameData)) {
@@ -182,16 +230,21 @@ public class CatalogueIndexer {
 
     /* ---------- building the catalogue ---------- */
 
-    static Catalogue build(Map<String, Raw> raw) {
+    static Map<String, List<String>> bases(Map<String, Raw> raw) {
         Map<String, List<String>> bybase = new HashMap<>();
-        List<Catalogue.Entry> objects = new ArrayList<>();
-        Map<String, String> objname = new HashMap<>();
         for(Raw r : raw.values()) {
             if(r.name.startsWith(OBJ) && r.model) {
                 String base = r.name.substring(r.name.lastIndexOf('/') + 1);
                 bybase.computeIfAbsent(base, k -> new ArrayList<>()).add(r.name);
             }
         }
+        return(bybase);
+    }
+
+    static Catalogue build(Map<String, Raw> raw) {
+        Map<String, List<String>> bybase = bases(raw);
+        List<Catalogue.Entry> objects = new ArrayList<>();
+        Map<String, String> objname = new HashMap<>();
         List<Catalogue.Entry> build = new ArrayList<>();
         for(Raw r : raw.values()) {
             if(!r.name.startsWith(BLD) || r.bp == null)
@@ -247,45 +300,5 @@ public class CatalogueIndexer {
             p = pr.parent;
         }
         return(path.isEmpty() ? "Build" : String.join(" › ", path));
-    }
-
-    /* ---------- persistence ---------- */
-
-    static JSONObject tojson(Map<String, Raw> raw) {
-        JSONArray a = new JSONArray();
-        for(Raw r : raw.values()) {
-            JSONObject o = new JSONObject();
-            o.put("n", r.name);
-            if(r.model) o.put("m", 1);
-            if(r.tileset) o.put("ts", 1);
-            if(r.tooltip != null) o.put("t", r.tooltip);
-            if(r.parent != null) o.put("p", r.parent);
-            if(r.title != null) o.put("a", r.title);
-            if(r.bp != null) o.put("b", r.bp);
-            a.put(o);
-        }
-        JSONObject ret = new JSONObject();
-        ret.put("format", FORMAT);
-        ret.put("res", a);
-        return(ret);
-    }
-
-    static Map<String, Raw> fromjson(JSONObject o) {
-        if(o.optInt("format") != FORMAT)
-            return(null);
-        Map<String, Raw> ret = new HashMap<>();
-        JSONArray a = o.getJSONArray("res");
-        for(int i = 0; i < a.length(); i++) {
-            JSONObject e = a.getJSONObject(i);
-            Raw r = new Raw(e.getString("n"));
-            r.model = e.optInt("m") == 1;
-            r.tileset = e.optInt("ts") == 1;
-            r.tooltip = e.optString("t", null);
-            r.parent = e.optString("p", null);
-            r.title = e.optString("a", null);
-            r.bp = e.optString("b", null);
-            ret.put(r.name, r);
-        }
-        return(ret);
     }
 }

@@ -326,16 +326,12 @@ public class PlannerRunner implements UI.Runner {
         savedaseq = plan.areaseq;
         if(loaded != null && Files.exists(terrainfile(file)))
             savedtseq = terrain.seq;
-        Thread indexer = new HackThread(() -> {
-            try {
-                catalogue = new CatalogueIndexer(ArchitectEnv.gameData, ArchitectEnv.resJar(), ArchitectEnv.pack, ArchitectEnv.home, s -> progress = s).load();
-            } catch(IOException e) {
-                progress = "Could not index objects: " + e.getMessage();
-                new Warning(e, "catalogue indexing failed").issue();
-            }
-        }, "Architect catalogue indexer");
-        indexer.setDaemon(true);
-        indexer.start();
+        try {
+            catalogue = Catalogue.shipped();
+        } catch(IOException e) {
+            progress = "Could not read the object catalogue: " + e.getMessage();
+            new Warning(e, "catalogue missing").issue();
+        }
         try {
             synchronized(this) {
                 while(next == null)

@@ -55,6 +55,25 @@ public class ResFile {
         return((b == null) ? null : new String(b, Utils.utf8));
     }
 
+    /** The "deps" layer: every resource this one needs (textures, materials, code libraries, sounds). */
+    public List<String> deps() {
+        List<String> ret = new ArrayList<>();
+        byte[] b = layer("deps");
+        if(b == null)
+            return(ret);
+        try {
+            MessageBuf in = new MessageBuf(b);
+            in.uint8();
+            while(!in.eom()) {
+                ret.add(in.string());
+                in.uint16();
+            }
+        } catch(Message.BinError e) {
+            /* keep what was read */
+        }
+        return(ret);
+    }
+
     /** The "action" layer of a menu entry (pagina), as Resource.AButton reads it. */
     public static class Action {
         public final String parent, name;

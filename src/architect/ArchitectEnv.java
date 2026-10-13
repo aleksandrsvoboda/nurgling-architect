@@ -8,60 +8,50 @@ import java.net.URI;
 import java.nio.file.*;
 
 /**
- * Process-wide setup that keeps the planner off the game's files and off the network.
+ * Process-wide setup that keeps the planner off the game's files.
  *
- * - Config.localdir is redirected to %APPDATA%\Nurgling Architect, so NConfig, ResCache.global
- *   and every nurgling data file (NUtils.getDataFile) live there, never in the game profile.
- * - Resources resolve from the bundled jars plus the game's cache opened read-only.
- *   No HttpSource is ever added (that only happens in Client.setupres, which we never call).
+ * - Config.localdir is redirected to %APPDATA%\Nurgling Architect, so NConfig, ResCache.global and every
+ *   nurgling data file (NUtils.getDataFile) live there, never in a game profile.
+ * - Game art comes from the game's public resource server, downloaded the first time something needs it and
+ *   kept in the planner's own cache (%APPDATA%\Nurgling Architect\data). Nothing else ever goes online:
+ *   there is no game session, and the game's own cache is never touched.
  *
  * Must run before anything touches Config, ResCache or Resource.remote().
  */
 public class ArchitectEnv {
-    public static final URI RES_CACHE_ID = URI.create("http://game.havenandhearth.com/render/");
+    /** Where the game client downloads resources from (haven.resurl in the client's config). */
+    public static final URI RESURL = URI.create(System.getProperty("architect.resurl", "https://game.havenandhearth.com/res/"));
 
     public static Path home;
-    public static Path gameData;
-    /** The game's local dir (parent of data/): your area presets live here. Read only. */
+    /** The game's local folder, if this PC has the game: only your area presets are read from it. */
     public static Path gameRoot;
-    public static ReadOnlyGameCache resCache;
-    /** The planner's folder (the clone): pack/, engine/, runtime/ live here. */
+    /** The planner's own resource cache (downloaded game art). */
+    public static ResCache cache;
+    /** The planner's folder (the clone): app/, engine/, runtime/ live here. */
     public static Path root;
-    /** Game art shipped with the planner; empty when no pack was built. */
-    public static architect.res.PackSource pack;
 
     public static void init() {
         String appdata = System.getenv("APPDATA");
         Path appbase = (appdata != null) ? Paths.get(appdata) : Paths.get(System.getProperty("user.home"));
         home = Paths.get(System.getProperty("architect.home", appbase.resolve("Nurgling Architect").toString()));
-        gameData = Paths.get(System.getProperty("architect.gamedata", appbase.resolve("Haven and Hearth").resolve("data").toString()));
-        gameRoot = gameData.getParent();
+        gameRoot = appbase.resolve("Haven and Hearth");
         try {
             Files.createDirectories(home);
         } catch(java.io.IOException e) {
             throw(new RuntimeException("cannot create " + home, e));
         }
         setLocaldir(home);
-
         root = findroot();
-        /* The pack makes the planner work without the game; the game's cache, if this machine has
-         * one, is read too (never written) for anything newer or missing from the pack. */
-        if(Files.isDirectory(gameData)) {
-            resCache = new ReadOnlyGameCache(gameData, RES_CACHE_ID);
-            Resource.setcache(resCache);
-        }
-        try {
-            pack = new architect.res.PackSource(root.resolve("pack"));
-        } catch(java.io.IOException e) {
-            throw(new RuntimeException("cannot open the planner's art pack in " + root.resolve("pack"), e));
-        }
-        if(!pack.empty())
-            Resource.remote().add(pack);
+
+        /* The client's own setup, pointed at the planner's folder: cache first, then the server. */
+        cache = HashDirCache.get("architect");
+        Resource.setcache(cache);
+        Resource.addurl(RESURL);
 
         MainFrame.config = new NConfig();
         MainFrame.config.read();
         plannerDefaults();
-        System.out.println("[architect] home=" + home + " root=" + root + " pack=" + pack + " gamecache=" + (resCache != null ? gameData : "none"));
+        System.out.println("[architect] home=" + home + " root=" + root + " art from " + RESURL + " (cached in " + home.resolve("data") + ")");
     }
 
     /**

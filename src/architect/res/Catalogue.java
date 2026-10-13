@@ -1,5 +1,9 @@
 package architect.res;
 
+import org.json.*;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.*;
 
@@ -64,6 +68,70 @@ public class Catalogue {
             if(res.equals(e.res))
                 return(e.name);
         return(prettify(res));
+    }
+
+    /* ---------- the shipped catalogue (names only, no art) ---------- */
+
+    public static final int FORMAT = 1;
+    /** Built by {@code DevTools catalogue}; packaged in the planner jar. */
+    public static final String RESOURCE = "/architect/res/catalogue.json";
+
+    private static JSONArray tojson(List<Entry> es) {
+        JSONArray a = new JSONArray();
+        for(Entry e : es) {
+            JSONObject o = new JSONObject();
+            if(e.res != null) o.put("r", e.res);
+            o.put("n", e.name);
+            o.put("c", e.category);
+            if(e.pagina != null) o.put("p", e.pagina);
+            a.put(o);
+        }
+        return(a);
+    }
+
+    private static List<Entry> fromjson(JSONArray a) {
+        List<Entry> ret = new ArrayList<>();
+        for(int i = 0; a != null && i < a.length(); i++) {
+            JSONObject o = a.getJSONObject(i);
+            ret.add(new Entry(o.optString("r", null), o.getString("n"), o.getString("c"), o.optString("p", null)));
+        }
+        return(ret);
+    }
+
+    public String save() {
+        JSONObject o = new JSONObject();
+        o.put("format", FORMAT);
+        o.put("build", tojson(build));
+        o.put("objects", tojson(objects));
+        o.put("tiles", tojson(tiles));
+        return(o.toString(0));
+    }
+
+    public static Catalogue parse(String json) {
+        JSONObject o = new JSONObject(json);
+        if(o.optInt("format") != FORMAT)
+            throw(new JSONException("unsupported catalogue format " + o.optInt("format")));
+        return(new Catalogue(fromjson(o.optJSONArray("build")), fromjson(o.optJSONArray("objects")), fromjson(o.optJSONArray("tiles"))));
+    }
+
+    /** The catalogue shipped inside the planner jar. */
+    public static Catalogue shipped() throws IOException {
+        try(InputStream in = Catalogue.class.getResourceAsStream(RESOURCE)) {
+            if(in == null)
+                throw(new FileNotFoundException("the planner was built without its catalogue (" + RESOURCE + ")"));
+            return(parse(new String(in.readAllBytes(), StandardCharsets.UTF_8)));
+        }
+    }
+
+    /** Every resource the catalogue refers to: objects, menu icons and ground tilesets. */
+    public Set<String> resources() {
+        Set<String> ret = new LinkedHashSet<>();
+        for(List<Entry> l : Arrays.asList(build, objects, tiles))
+            for(Entry e : l) {
+                if(e.res != null) ret.add(e.res);
+                if(e.pagina != null) ret.add(e.pagina);
+            }
+        return(ret);
     }
 
     static String prettify(String res) {

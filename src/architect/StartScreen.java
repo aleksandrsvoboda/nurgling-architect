@@ -20,6 +20,9 @@ import java.util.stream.*;
 public class StartScreen implements UI.Runner {
     private volatile UI.Runner chosen = null;
     private volatile String error = null;
+    /* "Download all game art": one at a time, kept across screen rebuilds. */
+    private static volatile architect.res.Prefetch prefetch = null;
+    private static volatile String prefetchmsg = null;
 
     public String title() {
         return("Nurgling Architect");
@@ -70,6 +73,7 @@ public class StartScreen implements UI.Runner {
         final GenPanel gen;
         final TextEntry name;
         final Button genb, sandb, smaller, bigger, create;
+        Button dlb;
         boolean sandbox = false;
         int size = 10;
         final Map<Object, Tex> tex = new HashMap<>();
@@ -87,7 +91,8 @@ public class StartScreen implements UI.Runner {
                     g.image(text(e.info, small, DIM), Coord.of(UI.scale(6), UI.scale(20)));
                 }
             }, x0, y0);
-            add(new Button(lw, "Open plan", false, this::openplan), x0, planlist.c.y + planlist.sz.y + UI.scale(8));
+            Button open = add(new Button(lw, "Open plan", false, this::openplan), x0, planlist.c.y + planlist.sz.y + UI.scale(8));
+            dlb = add(new Button(lw, "Download all game art (offline use)", false, this::download), x0, open.c.y + open.sz.y + UI.scale(24));
 
             int px = UI.scale(LEFT);
             genb = add(new Button(UI.scale(200), "Generate a world", false, () -> sandbox = false), px, y0);
@@ -112,6 +117,35 @@ public class StartScreen implements UI.Runner {
         void size(int d) {
             size = Utils.clip(size + d, 4, 20);
             gen.size = size;
+        }
+
+        /* Game art normally downloads the first time each object is used; this gets all of it now. */
+        void download() {
+            if(prefetch != null)
+                return;
+            architect.res.Catalogue cat;
+            try {
+                cat = architect.res.Catalogue.shipped();
+            } catch(IOException e) {
+                error = e.getMessage();
+                return;
+            }
+            architect.res.Prefetch p = new architect.res.Prefetch(cat, ArchitectEnv.cache, m -> prefetchmsg = m);
+            prefetch = p;
+            prefetchmsg = "Starting download...";
+            Thread t = new HackThread(() -> {
+                try {
+                    int n = p.run();
+                    prefetchmsg = (p.failed.get() == 0) ? String.format("All game art downloaded (%d files). The planner now works offline.", n)
+                        : String.format("Downloaded %d files; %d could not be fetched (offline, or gone from the server).", n, p.failed.get());
+                } catch(InterruptedException e) {
+                    prefetchmsg = "Download stopped.";
+                } finally {
+                    prefetch = null;
+                }
+            }, "Architect prefetch");
+            t.setDaemon(true);
+            t.start();
         }
 
         void openplan() {
@@ -172,7 +206,7 @@ public class StartScreen implements UI.Runner {
             g.frect(Coord.z, sz);
             g.chcolor();
             g.image(text("Nurgling Architect", big, NStyle.border), Coord.of(UI.scale(24), UI.scale(18)));
-            g.image(text("Offline base planner. Plan on a generated world or a flat sandbox; it never connects to anything.", fnd, DIM),
+            g.image(text("Base planner. Plan on a generated world or a flat sandbox. No game install or login needed.", fnd, DIM),
                     Coord.of(UI.scale(24), UI.scale(50)));
             g.image(text("Your plans", head, Color.WHITE), planlist.c.sub(0, UI.scale(22)));
             g.image(text("New plan", head, Color.WHITE), genb.c.sub(0, UI.scale(22)));
@@ -181,6 +215,10 @@ public class StartScreen implements UI.Runner {
             g.image(text(String.format("%d × %d grids", size, size), fnd, Color.WHITE), smaller.c.add(UI.scale(40), UI.scale(4)));
             if(plans.isEmpty())
                 g.image(text("No plans yet", fnd, DIM), planlist.c.add(UI.scale(8), UI.scale(8)));
+            g.image(text("Game art downloads from the game's server the first time it's used.", small, DIM), dlb.c.sub(0, UI.scale(16)));
+            String pm = prefetchmsg;
+            if(pm != null)
+                g.image(text(pm, small, Color.WHITE), dlb.c.add(0, dlb.sz.y + UI.scale(4)));
             String err = error;
             if(err != null)
                 g.image(text(err, fnd, new Color(255, 120, 100)), Coord.of(UI.scale(24), sz.y - UI.scale(28)));
