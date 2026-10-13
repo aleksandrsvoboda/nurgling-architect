@@ -249,7 +249,8 @@ public class PlannerView extends MapView {
             glob.oc.remove(preview.remove(preview.size() - 1));
         try {
             while(preview.size() < pos.size()) {
-                Gob g = new Gob(glob, pos.get(preview.size()));
+                /* Unique (virtual) ids: OCache keys objects by id, so a shared id hides all but one. */
+                Gob g = glob.oc.new Virtual(pos.get(preview.size()), 0);
                 g.setattr(new nurgling.GhostAlpha(g));
                 g.setattr(new ResDrawable(g, res));
                 glob.oc.add(g);

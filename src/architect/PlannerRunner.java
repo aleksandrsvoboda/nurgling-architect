@@ -261,7 +261,7 @@ public class PlannerRunner implements UI.Runner {
             if(catalogue == null)
                 return(progress);
             if(view.play.on)
-                return("Play mode   Click: walk there   WASD: move   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back to planning");
+                return("Play mode   Click: walk there   WASD: move   1-4: crawl/walk/run/sprint   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back");
             if(view.placing() != null)
                 return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())

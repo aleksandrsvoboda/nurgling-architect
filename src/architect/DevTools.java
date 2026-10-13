@@ -21,7 +21,17 @@ public class DevTools {
             catalogue(args);
         else if(cmd.equals("prefetch"))
             prefetch();
-        else if(cmd.equals("layers")) {
+        else if(cmd.equals("poses")) {
+            for(int i = 1; i < args.length; i++) {
+                haven.Resource r = haven.Resource.remote().loadwait(args[i]);
+                for(haven.Skeleton.ResPose p : r.layers(haven.Skeleton.ResPose.class)) {
+                    int tracks = 0;
+                    for(Object t : p.tracks)
+                        if(t != null) tracks++;
+                    System.out.printf("%s id=%d len=%.2f nspeed=%.2f mode=%s tracks=%d fx=%d%n", args[i], p.id, p.len, p.nspeed, p.defmode, tracks, p.effects.length);
+                }
+            }
+        } else if(cmd.equals("layers")) {
             for(int i = 1; i < args.length; i++) {
                 haven.Resource r = haven.Resource.remote().loadwait(args[i]);
                 java.util.Map<String, Integer> c = new java.util.TreeMap<>();

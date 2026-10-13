@@ -15,8 +15,15 @@ import java.util.*;
  * of running. Planned objects block the way by their real footprints. Esc leaves play mode.
  */
 public class PlayMode {
-    /** World units per second. One tile is 11 units. */
-    public static final double RUN = 36, WALK = 18, SWIM = 12;
+    /**
+     * The game's four speeds (1 crawl, 2 walk, 3 run, 4 sprint), in world units per second (a tile is 11).
+     * Walk and run are the paces the walking and running animations were made for (their nspeed), so the
+     * legs match the ground; crawl and sprint play those same animations slower or faster.
+     */
+    public static final double[] SPEEDS = {11.5, 22.92, 33.33, 44.0};
+    public static final double SWIM = 12;
+    /** Index into SPEEDS; the game's default is run. */
+    public int speed = 2;
     /** Half-size of the character's square footprint, in world units. */
     static final double BODY = 2.5;
     private final PlannerView mv;
@@ -24,6 +31,33 @@ public class PlayMode {
     public boolean on = false;
     private Gob gob = null;
     private Composite comp = null;
+    private Stride stride = null;
+    private double lastdebug = 0;
+
+    /**
+     * Tells the engine how fast the character moves. Walking and running poses advance by the owner's speed
+     * (Skeleton: dt *= getv() / pose speed), so without this the walk cycle stands still. Positions the gob
+     * the same way the game's own LinMove does.
+     */
+    static class Stride extends Moving {
+        volatile double v = 0;
+
+        Stride(Gob gob) {
+            super(gob);
+        }
+
+        public Coord3f getc() {
+            return(gob.placer().getc(gob.rc, gob.a));
+        }
+
+        public Coord3f gett() {
+            return(getc());
+        }
+
+        public double getv() {
+            return(v);
+        }
+    }
     private Coord2d pos, target = null;
     private double angle = 0;
     private String pose = null;
@@ -69,7 +103,11 @@ public class PlayMode {
         if(name.equals(pose) || comp == null)
             return;
         pose = name;
-        comp.chposes(Collections.singletonList(new ResData(r(name), Message.nil)), true);
+        /* A pose resource holds several layers; the bitmask in its data picks which apply (Skeleton.ModFactory.def).
+         * The server always sends one; with none, no layer applies and the bones never move. */
+        int mask = Integer.getInteger("architect.posemask", 0xffff);
+        byte[] sdt = {(byte)(mask & 0xff), (byte)((mask >> 8) & 0xff)};
+        comp.chposes(Collections.singletonList(new ResData(r(name), new MessageBuf(sdt))), true);
     }
 
     /* ---------- entering and leaving ---------- */
@@ -88,16 +126,19 @@ public class PlayMode {
         mv.cc = at;
         Glob glob = mv.glob;
         glob.loader.defer(() -> {
-            Gob g = new Gob(glob, pos);
+            Gob g = glob.oc.new Virtual(pos, angle);
             Composite c = new Composite(g, r("gfx/borka/body"));
             c.chmod(outfit());
             g.setattr(c);
+            Stride st = new Stride(g);
+            g.setattr(st);
             g.move(pos, angle);
             synchronized(PlayMode.this) {
                 if(!on)
                     return;
                 gob = g;
                 comp = c;
+                stride = st;
             }
             glob.oc.add(g);
             setpose("gfx/borka/idle");
@@ -113,6 +154,7 @@ public class PlayMode {
             g = gob;
             gob = null;
             comp = null;
+            stride = null;
         }
         if(g != null)
             mv.glob.oc.remove(g);
@@ -181,9 +223,11 @@ public class PlayMode {
                 dir = d.div(len);
         }
         int wet = water(pos);
+        double moved = 0;
         if(dir != null) {
-            double speed = (wet == 2) ? SWIM : (walk ? WALK : RUN);
-            double step = speed * dt;
+            int lvl = walk ? Math.min(speed, 1) : speed;
+            double pace = (wet == 2) ? SWIM : SPEEDS[lvl];
+            double step = pace * dt;
             if(target != null)
                 step = Math.min(step, target.dist(pos));
             Coord2d np = pos.add(dir.mul(step));
@@ -197,11 +241,19 @@ public class PlayMode {
                 setpose(wet == 2 ? "gfx/borka/swimman" : "gfx/borka/idle");
             } else {
                 angle = Math.atan2(dir.y, dir.x);
+                moved = np.dist(pos) / dt;
                 pos = np;
-                setpose((wet == 2) ? "gfx/borka/swimman" : (wet == 1) ? "gfx/borka/wading" : walk ? "gfx/borka/walking" : "gfx/borka/running");
+                setpose((wet == 2) ? "gfx/borka/swimman" : (wet == 1) ? "gfx/borka/wading" : (lvl >= 2) ? "gfx/borka/running" : "gfx/borka/walking");
             }
         } else {
             setpose((wet == 2) ? "gfx/borka/swimman" : "gfx/borka/idle");
+        }
+        Stride st = stride;
+        if(st != null)
+            st.v = moved;
+        if(Boolean.getBoolean("architect.debugplay") && (Utils.rtime() - lastdebug) > 0.5) {
+            lastdebug = Utils.rtime();
+            System.out.printf("[play] pos %s v %.1f pose %s%n", pos, moved, pose);
         }
         Gob g = gob;
         if(g != null)
@@ -232,6 +284,9 @@ public class PlayMode {
         switch(ev.code) {
         case KeyEvent.VK_W: case KeyEvent.VK_A: case KeyEvent.VK_S: case KeyEvent.VK_D:
             held.add(ev.code);
+            return(true);
+        case KeyEvent.VK_1: case KeyEvent.VK_2: case KeyEvent.VK_3: case KeyEvent.VK_4:
+            speed = ev.code - KeyEvent.VK_1;
             return(true);
         case KeyEvent.VK_ESCAPE:
             stop();

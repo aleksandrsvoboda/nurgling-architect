@@ -490,7 +490,8 @@ public class Plan {
                 if(objs.get(o.id) != o || o.gob != null || !layers.shown(o.layer))
                     return;
             }
-            Gob g = new Gob(glob, o.rc);
+            /* Unique (virtual) ids: OCache keys objects by id; with a shared id it ticks and removes only one. */
+            Gob g = glob.oc.new Virtual(o.rc, o.a);
             g.setattr(new ResDrawable(g, res, new MessageBuf(o.sdt)));
             g.move(o.rc, o.a);
             synchronized(Plan.this) {
