@@ -38,7 +38,7 @@ public class PlannerView extends MapView {
     /** Set by the runner once the terrain store exists. */
     public TerrainTool terrain = null;
     public final PlayMode play;
-    public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 5;
+    public static final int MINVIEW = 3, MAXVIEW = 16, DEFVIEW = 4;
     /** Grass and flowers (flavour objects) only this many cuts around the camera; bare ground reaches further. */
     public static final int FLAVVIEW = 3;
     /** Resource being placed, or null. */

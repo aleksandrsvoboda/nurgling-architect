@@ -46,7 +46,6 @@ public class ArchitectEnv {
         }
         setLocaldir(home);
         root = findroot();
-        defaultRenderer();
 
         /* The client's own setup, pointed at the planner's folder: cache first, then the server. */
         cache = HashDirCache.get("architect");
@@ -57,19 +56,6 @@ public class ArchitectEnv {
         MainFrame.config.read();
         plannerDefaults();
         System.out.println("[architect] home=" + home + " root=" + root + " art from " + RESURL + " (cached in " + home.resolve("data") + ")");
-    }
-
-    /**
-     * Vulkan by default, once per install (the choice can still be changed later). Measured on the same PC:
-     * OpenGL ~90 FPS vs Vulkan 144, because NVIDIA's "Threaded optimization" stalls the GL path and the
-     * per-program fix people apply to their JDK's java.exe doesn't reach the bundled runtime's java.exe.
-     * PCs without Vulkan fall back to OpenGL by themselves (RendererPref.fallback).
-     */
-    private static void defaultRenderer() {
-        if(!Utils.getprefb("architect-renderer-defaulted", false)) {
-            haven.iosys.tk.RendererPref.set(haven.iosys.tk.RendererPref.VULKAN);
-            Utils.setprefb("architect-renderer-defaulted", true);
-        }
     }
 
     /**
