@@ -278,44 +278,10 @@ public class Blueprints {
         return(ret);
     }
 
-    /** Newest file time in the folder plus its file count, to notice changes (the game saving one) cheaply. */
-    public static long stamp(Path dir) {
-        long t = 0, n = 0;
-        if(!Files.isDirectory(dir))
-            return(0);
-        try(DirectoryStream<Path> fs = Files.newDirectoryStream(dir, "*.json")) {
-            for(Path f : fs) {
-                t = Math.max(t, Files.getLastModifiedTime(f).toMillis());
-                n++;
-            }
-        } catch(IOException e) {
-            return(-1);
-        }
-        return(t * 1000 + n);
-    }
-
-    /** File name from a preset name, as the game makes it (AreaPresetStore.slug). */
-    public static String slug(String name) {
-        StringBuilder sb = new StringBuilder();
-        for(char c : name.trim().toCharArray()) {
-            if(Character.isLetterOrDigit(c) || c == '-' || c == '_')
-                sb.append(c);
-            else if(sb.length() > 0 && sb.charAt(sb.length() - 1) != '_')
-                sb.append('_');
-        }
-        String s = sb.toString();
-        while(s.endsWith("_"))
-            s = s.substring(0, s.length() - 1);
-        return(s.isEmpty() ? "preset" : s);
-    }
-
     /** Saves a new preset under a fresh file name made from its name. */
     public static void saveNew(Path dir, Preset p) throws IOException {
         Files.createDirectories(dir);
-        String base = slug(p.name), file = base + ".json";
-        for(int i = 2; Files.exists(dir.resolve(file)); i++)
-            file = base + "-" + i + ".json";
-        p.file = file;
+        p.file = PresetFiles.freename(dir, p.name);
         p.raw = null;
         write(dir, p);
     }
@@ -329,30 +295,17 @@ public class Blueprints {
             throw(new IOException("blueprint has no file: " + p.name));
         if(p.foreign)
             throw(new IOException("made by a different version of the game: " + p.name));
-        JSONObject o;
-        if(p.raw != null) {
-            o = new JSONObject(p.raw.toString());
-            o.put("name", p.name);
-            if(p.description.isEmpty())
-                o.remove("description");
-            else
-                o.put("description", p.description);
-        } else {
-            o = p.json();
-        }
-        atomic(dir.resolve(p.file), o.toString(2));
+        JSONObject o = (p.raw != null) ? PresetFiles.renamed(p.raw, p.name, p.description) : p.json();
+        PresetFiles.atomic(dir.resolve(p.file), o.toString(2));
         p.raw = o;
     }
 
     public static void delete(Path dir, Preset p) throws IOException {
-        if(p.file == null)
-            return;
-        Files.deleteIfExists(dir.resolve(p.file));
-        Files.deleteIfExists(dir.resolve(p.file + ".bak"));
+        PresetFiles.delete(dir, p.file);
     }
 
     public static void export(Preset p, Path target) throws IOException {
-        atomic(target, ((p.raw != null) ? p.raw : p.json()).toString(2));
+        PresetFiles.atomic(target, ((p.raw != null) ? p.raw : p.json()).toString(2));
     }
 
     /** Copies a preset file from elsewhere into the folder; throws if it isn't one. */
@@ -370,25 +323,4 @@ public class Blueprints {
         return(p);
     }
 
-    /** As the game's NFileUtils.writeAtomically: write a .tmp, keep the old file as .bak, move the new one in. */
-    static void atomic(Path target, String text) throws IOException {
-        if(target.getParent() != null)
-            Files.createDirectories(target.getParent());
-        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
-        Path bak = target.resolveSibling(target.getFileName() + ".bak");
-        Files.write(tmp, text.getBytes(StandardCharsets.UTF_8));
-        if(Files.exists(target)) {
-            try {
-                Files.copy(target, bak, StandardCopyOption.REPLACE_EXISTING);
-            } catch(IOException e) {
-                /* as in the game: a missing backup does not stop the save */
-                System.out.println("[blueprints] no backup of " + target + ": " + e.getMessage());
-            }
-        }
-        try {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch(AtomicMoveNotSupportedException e) {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
 }

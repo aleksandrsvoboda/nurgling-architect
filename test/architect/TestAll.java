@@ -246,7 +246,7 @@ public class TestAll {
             refused = true;
         }
         check(fut != null && fut.foreign && refused, "newer formats listed, never rewritten");
-        check(Blueprints.slug("  Mill yard / east!! ").equals("Mill_yard_east"), "slug like the game");
+        check(PresetFiles.slug("  Mill yard / east!! ").equals("Mill_yard_east"), "slug like the game");
 
         /* turning: one quarter turn of a 2x1 box, as the game's PlannerPreset.transformed does it */
         Blueprints.Preset t = new Blueprints.Preset();
@@ -290,6 +290,77 @@ public class TestAll {
         check(reg.count() == 1 && reg.kind == Blueprints.Kind.LAYER, "region takes what is inside");
     }
 
+    /** Area presets: every built-in game preset survives plan and back; turns match the game; files like the game's. */
+    static void areapresets() throws Exception {
+        List<AreaPresets.Preset> bi = AreaPresets.builtins();
+        check(bi.size() >= 20, "built-in area presets read (" + bi.size() + ")");
+        boolean allsame = true;
+        String bad = "";
+        for(AreaPresets.Preset p : bi) {
+            Plan plan = new Plan(session().glob);
+            String folder = AreaPresets.place(plan, p, Coord.of(30, 40), "", null);
+            AreaPresets.Preset back = AreaPresets.capture(plan, p.name, Collections.emptyList(), Collections.singleton(folder));
+            if(back.count() != p.count() || back.w != p.w || back.h != p.h) {
+                allsame = false;
+                bad = p.name;
+                continue;
+            }
+            for(org.json.JSONObject o : p.areas) {
+                boolean found = false;
+                for(org.json.JSONObject b : back.areas) {
+                    if(b.getString("name").equals(o.getString("name")) && b.getInt("x") == o.getInt("x") && b.getInt("y") == o.getInt("y")
+                       && b.getInt("w") == o.getInt("w") && b.getInt("h") == o.getInt("h")
+                       && b.getJSONArray("spec").similar(o.optJSONArray("spec") == null ? new org.json.JSONArray() : o.getJSONArray("spec"))
+                       && b.getJSONArray("in").similar(o.optJSONArray("in") == null ? new org.json.JSONArray() : o.getJSONArray("in"))
+                       && b.getJSONArray("out").similar(o.optJSONArray("out") == null ? new org.json.JSONArray() : o.getJSONArray("out"))
+                       && b.getString("path").endsWith(o.optString("path", ""))
+                       && b.optString("pile_fill_direction", "DEFAULT").equals(o.optString("pile_fill_direction", "DEFAULT")))
+                        found = true;
+                }
+                if(!found) {
+                    allsame = false;
+                    bad = p.name + " / " + o.getString("name");
+                }
+            }
+        }
+        check(allsame, "every built-in preset round-trips through the plan " + bad);
+        Plan plan = new Plan(session().glob);
+        AreaPresets.Preset first = bi.get(0);
+        String f1 = AreaPresets.place(plan, first, Coord.z, "", null), f2 = AreaPresets.place(plan, first, Coord.of(50, 0), "", null);
+        check(f1.equals("/" + first.name) && f2.equals("/" + first.name + " 2"), "placed in a folder named after it, like the game");
+        plan.undo();
+        check(plan.areas().size() == first.count(), "one undo per placement");
+
+        /* the game's turn: a 3x1 area in a 3x2 box, filled left to right, turned once */
+        AreaPresets.Preset t = AreaPresets.parse(new org.json.JSONObject("{\"format\":1,\"name\":\"T\",\"areas\":["
+            + "{\"name\":\"A\",\"x\":0,\"y\":0,\"w\":3,\"h\":1,\"pile_fill_direction\":\"LEFT_TO_RIGHT\"},"
+            + "{\"name\":\"B\",\"x\":0,\"y\":1,\"w\":1,\"h\":1}]}"));
+        AreaPresets.Preset t1 = t.transformed(1, false);
+        org.json.JSONObject a1 = t1.areas.get(0);
+        check(t1.w == 2 && t1.h == 3 && a1.getInt("x") == 1 && a1.getInt("y") == 0 && a1.getInt("w") == 1 && a1.getInt("h") == 3
+              && a1.getString("pile_fill_direction").equals("TOP_TO_BOTTOM"), "quarter turn moves the area and turns its fill");
+        org.json.JSONObject m = t.transformed(0, true).areas.get(0);
+        check(m.getString("pile_fill_direction").equals("RIGHT_TO_LEFT") && t.transformed(0, true).areas.get(1).getInt("x") == 2, "mirror");
+
+        Path dir = tmpdir("ap");
+        AreaPresets.Preset mine = AreaPresets.capture(plan, "My yard!", new ArrayList<>(plan.areas()), Collections.emptyList());
+        AreaPresets.saveNew(dir, mine);
+        check(mine.file.equals("My_yard.json") && AreaPresets.user(dir).size() == 1, "saved like the game names it");
+        boolean refused = false;
+        try {
+            AreaPresets.write(dir, bi.get(0));
+        } catch(java.io.IOException e) {
+            refused = true;
+        }
+        check(refused, "built-in presets are never written");
+
+        /* the game's own lists */
+        check(architect.res.AreaRules.specs().size() > 80 && architect.res.AreaRules.spec("crop") != null && architect.res.AreaRules.spec("fuelOven") != null, "specialisations from the game");
+        check(architect.res.AreaRules.subtypes("crop").contains("Wheat"), "crop subtypes");
+        architect.res.AreaRules.Item straw = architect.res.AreaRules.items().stream().filter(i -> i.name.equals("Straw")).findFirst().orElse(null);
+        check(architect.res.AreaRules.items().size() > 1000 && straw != null && "gfx/invobjs/straw".equals(straw.res), "items from the game's VSpec");
+    }
+
     public static void main(String[] args) throws Exception {
         /* Same isolated setup as the app, in a throwaway home: engine code reads nurgling config. */
         System.setProperty("architect.home", tmpdir("architect-test").toString());
@@ -302,6 +373,7 @@ public class TestAll {
         walls();
         catalogue();
         blueprints();
+        areapresets();
         System.out.println(passes + " passed, " + fails + " failed");
         cleanup();
         System.exit(fails == 0 ? 0 : 1);

@@ -33,6 +33,30 @@ public class PlanArea {
         return(new PlanArea(UUID.randomUUID().toString(), name, "", color, tiles, false, "[]", "[]", "[]", "DEFAULT", layer));
     }
 
+    /** A changeable copy of the fields; {@link #with(Edit)} makes the new area (same id). */
+    public static class Edit {
+        public String name, path, fill, layer;
+        public Color color;
+        public Area tiles;
+        public boolean hide;
+        public JSONArray spec, in, out;
+    }
+
+    public Edit edit() {
+        Edit e = new Edit();
+        e.name = name; e.path = path; e.fill = fill; e.layer = layer; e.color = color; e.tiles = tiles; e.hide = hide;
+        e.spec = new JSONArray(spec); e.in = new JSONArray(in); e.out = new JSONArray(out);
+        return(e);
+    }
+
+    public PlanArea with(Edit e) {
+        return(new PlanArea(id, e.name, e.path, e.color, e.tiles, e.hide, e.spec.toString(), e.in.toString(), e.out.toString(), e.fill, e.layer));
+    }
+
+    public JSONArray specs() {return(new JSONArray(spec));}
+    public JSONArray ins() {return(new JSONArray(in));}
+    public JSONArray outs() {return(new JSONArray(out));}
+
     public PlanArea with(String name, Color color, Area tiles, String layer) {
         return(new PlanArea(id, name, path, color, tiles, hide, spec, in, out, fill, layer));
     }

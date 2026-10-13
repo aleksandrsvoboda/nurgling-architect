@@ -533,6 +533,7 @@ public class PlannerView extends MapView {
             keypan(dt);
         plan.tick();
         blueprints.tick();
+        areas.tick();
         warmclicks();
         if(terrain != null)
             terrain.tick();
@@ -608,7 +609,7 @@ public class PlannerView extends MapView {
             } else if(terrain != null && terrain.on)
                 terrain.press(ev.c, ui.modflags());
             else if(areas.on)
-                areas.press(ev.c);
+                areas.press(ev.c, ui.modflags());
             else
                 edit.press(ev.c, ui.modflags());
             return(true);
@@ -628,6 +629,10 @@ public class PlannerView extends MapView {
     public boolean mousewheel(MouseWheelEvent ev) {
         if(blueprints.stamping()) {
             blueprints.turn((ev.a > 0) ? 1 : -1);
+            return(true);
+        }
+        if(areas.stamping()) {
+            areas.turnstamp((ev.a > 0) ? 1 : -1);
             return(true);
         }
         return(super.mousewheel(ev));

@@ -139,26 +139,6 @@ public class PlannerRunner implements UI.Runner {
 
     /* ---------- game interchange ---------- */
 
-    void exportareas() {
-        java.awt.EventQueue.invokeLater(() -> {
-            JFileChooser fc = new JFileChooser(AreaPresets.userdir().toFile());
-            fc.setDialogTitle("Export areas as an area preset");
-            fc.setFileFilter(new FileNameExtensionFilter("Area preset (JSON)", "json"));
-            fc.setSelectedFile(AreaPresets.userdir().resolve(name + ".json").toFile());
-            if(fc.showSaveDialog(null) != JFileChooser.APPROVE_OPTION || fc.getSelectedFile() == null)
-                return;
-            String p = fc.getSelectedFile().getAbsolutePath();
-            if(!p.endsWith(".json"))
-                p += ".json";
-            try {
-                int n = AreaPresets.export(Paths.get(p), name, plan);
-                msg((n == 0) ? "No visible areas to export" : "Exported " + n + " areas. In game: Areas › Presets › " + name + " › Place.");
-            } catch(IOException e) {
-                msg("Export failed: " + e.getMessage());
-            }
-        });
-    }
-
     void close() {
         save();
         next = new StartScreen();
@@ -305,7 +285,8 @@ public class PlannerRunner implements UI.Runner {
         final Toolbar toolbar;
         final LayersPanel layers;
         CataloguePanel panel = null;
-        final AreaPanel areapanel;
+        final AreasPanel areaspanel;
+        final AreaPresetsPanel areapresets;
         final Speedget speeds;
         final TerrainPanel terrainpanel;
         final WallBar wallbar;
@@ -320,8 +301,21 @@ public class PlannerRunner implements UI.Runner {
             toolbar = add(new Toolbar(sz.x), Coord.z);
             status = add(new StatusBar(sz.x, this::lefttext, this::righttext), 0, sz.y - StatusBar.H);
             layers = add(new LayersPanel(plan, view.sel, sideh()), sz.x - LayersPanel.W, toolbar.sz.y);
-            areapanel = add(new AreaPanel(view.areas, PlannerRunner.this::exportareas), (sz.x - AreaPanel.W) / 2, toolbar.sz.y + UI.scale(8));
-            areapanel.hide();
+            areapresets = add(new AreaPresetsPanel(view, PlannerRunner.this::msg), 0, 0);
+            areapresets.hide();
+            areaspanel = add(new AreasPanel(view, PlannerRunner.this::msg, () -> {
+                if(areapresets.visible) {
+                    areapresets.hide();
+                } else {
+                    areapresets.show();
+                    areapresets.raise();
+                }
+            }, () -> {
+                areapresets.show();
+                areapresets.raise();
+                areapresets.saveselection();
+            }), 0, 0);
+            areaspanel.hide();
             /* The game's own speed switcher (crawl/walk/run/sprint), driving play mode instead of the server. */
             speeds = add(new Speedget(view.play.speed, 3) {
                 public void set(int s) {
@@ -379,6 +373,10 @@ public class PlannerRunner implements UI.Runner {
                 return("Play mode   Click: walk there   WASD: move   1-4: crawl/walk/run/sprint   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back");
             if(view.blueprints.stamping())
                 return("Placing blueprint " + view.blueprints.stampname() + "   Wheel / R: turn   F: mirror   Click: place   Esc / right click: cancel");
+            if(view.areas.stamping())
+                return("Placing area preset " + view.areas.stampname() + "   Wheel / R: turn   F: mirror   Click: place   Esc: cancel");
+            if(view.areas.on)
+                return("Areas: drag on the ground: new area   Click: select   Shift+click: add   Drag: move   Drag an edge: resize   Ctrl+C/V/D: copy/paste/duplicate   Ctrl+Shift+C/V: settings   Del: delete");
             if(view.blueprints.regionarmed())
                 return("Save region: drag a rectangle on the ground   Esc / right click: cancel");
             if(architect.edit.Walls.kit(view.placing()) != null)
@@ -403,8 +401,9 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
-        private double bpdemo = 0;
+        private double bpdemo = 0, areademo = 0;
         private EditCheck editcheck = null;
+        private AreaCheck areacheck = null;
         private double lastfpslog = 0;
         /* Dev: -Darchitect.autoplay=1 enters play mode a few seconds in and walks east (for screenshots). */
         private final double autoplay = Boolean.getBoolean("architect.autoplay") ? Utils.rtime() + 4 : -1;
@@ -415,10 +414,13 @@ public class PlannerRunner implements UI.Runner {
                 resize(parent.sz);
                 layout();
             }
-            if(areapanel.visible != view.areas.on) {
-                areapanel.show(view.areas.on);
-                areapanel.c = Coord.of((sz.x - AreaPanel.W) / 2, toolbar.sz.y + UI.scale(8));
+            if(areaspanel.visible != view.areas.on) {
+                areaspanel.show(view.areas.on);
+                if(!view.areas.on)
+                    areapresets.hide();
             }
+            areaspanel.c = Coord.of(Math.max(0, (sz.x - AreasPanel.W) / 2), toolbar.sz.y + UI.scale(8));
+            areapresets.c = Coord.of(Math.max(0, sz.x - LayersPanel.W - areapresets.sz.x - UI.scale(8)), sz.y - StatusBar.H - areapresets.sz.y - UI.scale(8));
             /* Play mode is just you and the world: the planning panels step aside. */
             boolean planning = !view.play.on;
             if(speeds.visible == planning) {
@@ -447,6 +449,36 @@ public class PlannerRunner implements UI.Runner {
             Catalogue cat = catalogue;
             if(audit != null)
                 audit.tick(cat);
+            /* Dev: -Darchitect.areademo=step shows the Areas window with a built-in preset placed and an area
+             * selected; areademo=spec / item also opens that picker (screenshots without the mouse). */
+            String ad = System.getProperty("architect.areademo");
+            if(ad != null && cat != null) {
+                if(areademo == 0) {
+                    areademo = Utils.rtime() + 6;
+                } else if(areademo > 0 && Utils.rtime() > areademo) {
+                    toggleAreas();
+                    for(architect.io.AreaPresets.Preset p : architect.io.AreaPresets.builtins())
+                        if(p.name.equals("Bakery")) {
+                            view.areas.stamp(p);
+                            view.areas.placeat(view.cc.floor(MCache.tilesz));
+                        }
+                    for(architect.edit.PlanArea a : plan.areas())
+                        if(a.specs().length() > 0 && a.outs().length() + a.ins().length() > 0 || a.name.startsWith("Ovens"))
+                            view.areas.select(java.util.Collections.singleton(a.id), false);
+                    if(view.areas.selected().size() > 1)
+                        view.areas.select(java.util.Collections.singleton(view.areas.selected().get(0).id), false);
+                    view.areas.folder = view.areas.selected().isEmpty() ? "" : view.areas.selected().get(0).path;
+                    areademo = -(Utils.rtime() + 2);
+                } else if(areademo < -1 && Utils.rtime() > -areademo) {
+                    areademo = -1;
+                    if(!ad.equals("step"))
+                        areaspanel.demopicker(ad);
+                }
+            }
+            if(areacheck == null && Boolean.getBoolean("architect.areacheck"))
+                areacheck = new AreaCheck(view);
+            if(areacheck != null)
+                areacheck.tick();
             if(editcheck == null && (Boolean.getBoolean("architect.editcheck") || Boolean.getBoolean("architect.camcheck")))
                 editcheck = new EditCheck(view);
             if(editcheck != null)
