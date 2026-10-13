@@ -73,7 +73,9 @@ public class StartScreen implements UI.Runner {
         final GenPanel gen;
         final TextEntry name;
         final Button genb, sandb, smaller, bigger, create;
-        Button dlb;
+        Button dlb, delb;
+        /* Delete asks for a second click on the same plan. */
+        PlanEntry deleting = null;
         boolean sandbox = false;
         int size = 10;
         final Map<Object, Tex> tex = new HashMap<>();
@@ -91,7 +93,9 @@ public class StartScreen implements UI.Runner {
                     g.image(text(e.info, small, DIM), Coord.of(UI.scale(6), UI.scale(20)));
                 }
             }, x0, y0);
-            Button open = add(new Button(lw, "Open plan", false, this::openplan), x0, planlist.c.y + planlist.sz.y + UI.scale(8));
+            int hw = (lw - UI.scale(6)) / 2;
+            Button open = add(new Button(hw, "Open plan", false, this::openplan), x0, planlist.c.y + planlist.sz.y + UI.scale(8));
+            delb = add(new Button(hw, "Delete plan", false, this::deleteplan), x0 + hw + UI.scale(6), open.c.y);
             dlb = add(new Button(lw, "Download all game art (offline use)", false, this::download), x0, open.c.y + open.sz.y + UI.scale(24));
 
             int px = UI.scale(LEFT);
@@ -148,6 +152,41 @@ public class StartScreen implements UI.Runner {
             t.start();
         }
 
+        /** Moves the selected plan (and its terrain and backups) to plans\deleted, so it can be recovered. */
+        void deleteplan() {
+            PlanEntry e = planlist.sel;
+            if(e == null) {
+                error = "Choose a plan to delete";
+                return;
+            }
+            if(deleting != e) {
+                deleting = e;
+                delb.change("Click again to delete");
+                error = "Click Delete again to delete \"" + e.name + "\" (it goes to plans\\deleted)";
+                return;
+            }
+            Path bin = plansdir().resolve("deleted");
+            try {
+                Files.createDirectories(bin);
+                String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date());
+                try(Stream<Path> s = Files.list(plansdir())) {
+                    for(Path p : s.collect(Collectors.toList())) {
+                        String n = p.getFileName().toString();
+                        if(Files.isRegularFile(p) && (n.equals(e.name + PlanFile.EXT) || n.startsWith(e.name + PlanFile.EXT + ".")
+                                                      || n.equals(e.name + architect.world.TerrainStore.EXT)))
+                            Files.move(p, bin.resolve(stamp + " " + n));
+                    }
+                }
+                plans.remove(e);
+                planlist.change(null);
+                error = "Deleted \"" + e.name + "\" (kept in plans\\deleted)";
+            } catch(IOException ex) {
+                error = "Could not delete " + e.name + ": " + ex.getMessage();
+            }
+            deleting = null;
+            delb.change("Delete plan");
+        }
+
         void openplan() {
             PlanEntry e = planlist.sel;
             if(e == null) {
@@ -189,6 +228,10 @@ public class StartScreen implements UI.Runner {
         }
 
         public void tick(double dt) {
+            if(deleting != null && planlist.sel != deleting) {
+                deleting = null;
+                delb.change("Delete plan");
+            }
             if(parent != null && !sz.equals(parent.sz)) {
                 /* Rebuilt on resize: simplest way to lay everything out again. */
                 Widget p = parent;
