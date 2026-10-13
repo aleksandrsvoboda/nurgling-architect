@@ -121,7 +121,8 @@ public class PlannerView extends MapView {
         }
 
         public void drag(Coord c) {
-            telev = Utils.clip(elevorig - (c.y - dragorig.y) / 150f, 0.08f, (float)Math.PI / 2 - 0.001f);
+            /* Mouse up tilts toward the horizon, mouse down looks down at the ground. */
+            telev = Utils.clip(elevorig + (c.y - dragorig.y) / 150f, 0.08f, (float)Math.PI / 2 - 0.001f);
             tangl = anglorig + (c.x - dragorig.x) / 150f;
         }
 
