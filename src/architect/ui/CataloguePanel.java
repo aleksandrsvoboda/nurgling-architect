@@ -110,7 +110,7 @@ public class CataloguePanel extends Widget {
     private Tex[] label(Catalogue.Entry e) {
         return(labels.computeIfAbsent(e, k -> new Tex[] {
             fnd.render(k.name, k.placeable() ? Color.WHITE : OFF).tex(),
-            small.render(k.placeable() ? k.category : k.category + " · not seen in game yet", k.placeable() ? DIM : OFF).tex(),
+            small.render(k.placeable() ? k.category : k.category + " · no model in the pack", k.placeable() ? DIM : OFF).tex(),
         }));
     }
 
