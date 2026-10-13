@@ -20,6 +20,8 @@ import java.util.stream.*;
 public class StartScreen implements UI.Runner {
     private volatile UI.Runner chosen = null;
     private volatile String error = null;
+    /** What is being prepared in the background (create/open), or null. */
+    private volatile String busy = null;
     /* "Download all game art": one at a time, kept across screen rebuilds. */
     private static volatile architect.res.Prefetch prefetch = null;
     private static volatile String prefetchmsg = null;
@@ -187,26 +189,52 @@ public class StartScreen implements UI.Runner {
             delb.change("Delete plan");
         }
 
+        /** Something that builds the next screen's world; may throw IOException. */
+        interface Prep {
+            UI.Runner make() throws IOException;
+        }
+
+        /* Building a world loads (and maybe downloads) ground art and generates every grid: never on the UI thread. */
+        void prepare(String what, Prep prep) {
+            if(busy != null)
+                return;
+            busy = what;
+            error = null;
+            Thread t = new HackThread(() -> {
+                try {
+                    UI.Runner r = prep.make();
+                    if(r != null) {
+                        chosen = r;
+                        synchronized(StartScreen.this) {
+                            StartScreen.this.notifyAll();
+                        }
+                    }
+                } catch(IOException | RuntimeException e) {
+                    error = "Could not " + what.toLowerCase() + ": " + e.getMessage();
+                    new Warning(e, what).issue();
+                } finally {
+                    busy = null;
+                }
+            }, "Architect prepare");
+            t.setDaemon(true);
+            t.start();
+        }
+
         void openplan() {
             PlanEntry e = planlist.sel;
             if(e == null) {
                 error = "Choose a plan to open";
                 return;
             }
-            try {
+            prepare("Open " + e.name, () -> {
                 PlanFile.Data d = PlanFile.load(e.file);
                 WorldSource w = WorldRef.open(d.world);
                 if(w == null) {
                     error = "\"" + e.name + "\" was made on a saved game map, which is no longer supported";
-                    return;
+                    return(null);
                 }
-                chosen = new PlannerRunner(w, e.file, d.name, d);
-            } catch(IOException ex) {
-                error = "Could not open " + e.name + ": " + ex.getMessage();
-            }
-            synchronized(StartScreen.this) {
-                StartScreen.this.notifyAll();
-            }
+                return(new PlannerRunner(w, e.file, d.name, d));
+            });
         }
 
         void createplan() {
@@ -220,11 +248,12 @@ public class StartScreen implements UI.Runner {
                 error = "A plan called \"" + n + "\" already exists";
                 return;
             }
-            WorldSource w = sandbox ? new SandboxWorld(size, size, "gfx/tiles/grass") : gen.make();
-            chosen = new PlannerRunner(w, file, n, null, !sandbox && gen.trees);
-            synchronized(StartScreen.this) {
-                StartScreen.this.notifyAll();
-            }
+            boolean sb = sandbox, trees = !sandbox && gen.trees;
+            int sz = size;
+            prepare("Create " + n, () -> {
+                WorldSource w = sb ? new SandboxWorld(sz, sz, "gfx/tiles/grass") : gen.make();
+                return(new PlannerRunner(w, file, n, null, trees));
+            });
         }
 
         public void tick(double dt) {
@@ -262,6 +291,9 @@ public class StartScreen implements UI.Runner {
             String pm = prefetchmsg;
             if(pm != null)
                 g.image(text(pm, small, Color.WHITE), dlb.c.add(0, dlb.sz.y + UI.scale(4)));
+            String bz = busy;
+            if(bz != null)
+                g.image(text(bz + ": preparing the world (ground art downloads the first time)...", fnd, NStyle.border), Coord.of(UI.scale(24), sz.y - UI.scale(48)));
             String err = error;
             if(err != null)
                 g.image(text(err, fnd, new Color(255, 120, 100)), Coord.of(UI.scale(24), sz.y - UI.scale(28)));

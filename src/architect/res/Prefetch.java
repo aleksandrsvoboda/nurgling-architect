@@ -54,7 +54,8 @@ public class Prefetch {
                 busy.incrementAndGet();
                 pool.submit(() -> {
                     try {
-                        Resource.remote().loadwait(n);
+                        /* Low priority: whatever the planner needs right now is loaded first. */
+                        Loading.waitfor(Resource.remote().load(n, -1, -10));
                         try(InputStream in = cache.fetch("res/" + n)) {
                             ResFile f = ResFile.parse(in.readAllBytes());
                             if(f != null)
