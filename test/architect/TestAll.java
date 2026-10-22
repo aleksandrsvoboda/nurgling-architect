@@ -137,6 +137,23 @@ public class TestAll {
         check(!Collisions.overlapTest(a, c), "flush boxes do not collide");
     }
 
+    /** The ruler counts objects on a zone's tiles (half-open, shown layers), most first; zones include both corners. */
+    static void measure() {
+        double t = MCache.tilesz.x;
+        List<PlanObject> objs = Arrays.asList(
+            new PlanObject("o1", "gfx/terobjs/crate", null, Coord2d.of(5, 5), 0, null),
+            new PlanObject("o2", "gfx/terobjs/crate", null, Coord2d.of(t * 2 - 0.1, 5), 0, null),
+            new PlanObject("o3", "gfx/terobjs/house", null, Coord2d.of(5, t), 0, null),
+            new PlanObject("o4", "gfx/terobjs/house", null, Coord2d.of(t * 2, 5), 0, null),
+            new PlanObject("o5", "gfx/terobjs/tree", null, Coord2d.of(5, 5), 0, "hidden"));
+        Area zone = MeasureTool.rect(Coord.of(1, 1), Coord.of(0, 0));
+        check(zone.ul.equals(Coord.z) && zone.sz().equals(Coord.of(2, 2)), "a measured zone includes both corner tiles");
+        List<Map.Entry<String, Integer>> c = MeasureTool.count(objs, zone, l -> !"hidden".equals(l));
+        check(c.size() == 2 && c.get(0).getKey().equals("gfx/terobjs/crate") && c.get(0).getValue() == 2
+              && c.get(1).getKey().equals("gfx/terobjs/house") && c.get(1).getValue() == 1,
+              "zone counts: on its tiles only, shown layers only, most first: " + c);
+    }
+
     static void terrain() throws Exception {
         TerrainStore t = new TerrainStore(new SandboxWorld(2, 2, "gfx/tiles/grass"));
         t.snapshot();
@@ -369,6 +386,7 @@ public class TestAll {
         undoRedo();
         planFile();
         overlap();
+        measure();
         terrain();
         walls();
         catalogue();

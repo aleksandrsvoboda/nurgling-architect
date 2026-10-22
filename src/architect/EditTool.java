@@ -317,7 +317,8 @@ public class EditTool {
         List<PlanObject> objs = sel.objects();
         if(objs.isEmpty())
             return(false);
-        double step = fine ? MCache.tilesz.x / MapView.plobpgran : MCache.tilesz.x;
+        /* the fine grid's step; with the granularity at its free end, one world unit */
+        double step = !fine ? MCache.tilesz.x : (MapView.plobpgran > 0) ? MCache.tilesz.x / MapView.plobpgran : 1;
         plan.begin("Nudge");
         try {
             for(PlanObject o : objs)

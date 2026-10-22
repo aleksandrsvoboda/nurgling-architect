@@ -15,12 +15,13 @@ import java.util.*;
  * Camera: right-drag orbits/tilts, middle-drag pans, wheel zooms, WASD pans (Shift = faster),
  * Q/E turn, Tab switches between the orbit camera and the game's top-down ortho camera.
  *
- * Placing uses the game's own placement ghost (Plob) and snapping: tile centre, Shift = 1/8-tile grid,
- * Ctrl = flush against neighbouring objects; Ctrl/Shift+wheel turn 45/15 degrees, R turns 90. A left click
+ * Placing uses the game's own placement ghost (Plob) and snapping: tile centre, Shift = the fine grid,
+ * Ctrl = flush against neighbouring objects; Ctrl+wheel turns 45 degrees, Shift+wheel the fine angle, R turns 90.
+ * The fine grid and angle are the game's placement granularity (Options; 1/8 tile and 15 degrees). A left click
  * adds the object to the plan and keeps placing; Esc or a right click (without dragging) stops.
  * Dragging while placing lays a row spaced by the object's footprint; Alt+drag fills a rectangle.
  *
- * Editing (when not placing) is handled by {@link EditTool}.
+ * Editing (when not placing) is handled by {@link EditTool}; the ruler by {@link MeasureTool}.
  */
 public class PlannerView extends MapView {
     public static final double PAN_SPEED = 0.9;   /* fraction of the camera distance per second, x3 with Shift */
@@ -40,6 +41,7 @@ public class PlannerView extends MapView {
     public TerrainTool terrain = null;
     public final PlayMode play;
     public final BlueprintTool blueprints;
+    public final MeasureTool measure;
     /** Short messages for the status bar (set by the runner). */
     public java.util.function.Consumer<String> onmsg = s -> {};
     public static final String PREF_INVERTX = "camera-invert-x", PREF_INVERTY = "camera-invert-y";
@@ -76,6 +78,7 @@ public class PlannerView extends MapView {
         this.areas = new AreaTool(this);
         this.play = new PlayMode(this);
         this.blueprints = new BlueprintTool(this);
+        this.measure = new MeasureTool(this);
         if(gridbounds != null) {
             Coord2d gsz = MCache.tilesz.mul(Coord2d.of(MCache.cmaps));
             boundul = gsz.mul(Coord2d.of(gridbounds.ul));
@@ -304,6 +307,7 @@ public class PlannerView extends MapView {
 
     /** Starts stamping a blueprint preset; other tools step aside. */
     public void stampblueprint(architect.io.Blueprints.Preset p) {
+        measure.disarm();
         cancelplace();
         sel.clear();
         areas.on = false;
@@ -347,6 +351,7 @@ public class PlannerView extends MapView {
         if(terrain != null)
             terrain.on = false;
         play.stop();
+        measure.disarm();
         double angle = a;
         Indir<Resource> r = Resource.remote().load(res);
         placingres = res;
@@ -371,6 +376,14 @@ public class PlannerView extends MapView {
             p.place();
             return(p);
         });
+    }
+
+    /** The ruler took the next click: placing and stamping step aside. */
+    void measuring() {
+        cancelplace();
+        blueprints.cancel();
+        blueprints.cancelregion();
+        areas.cancelstamp();
     }
 
     public void cancelplace() {
@@ -573,6 +586,20 @@ public class PlannerView extends MapView {
 
     /* ---------- snapping shared with the edit tool ---------- */
 
+    /** Shift's grid for the status bar: "1/8-tile grid", or "free" at the slider's end. */
+    public static String finegrid() {
+        return((plobpgran > 0) ? String.format("1/%s-tile grid", num(plobpgran)) : "free");
+    }
+
+    /** Shift+wheel's turn for the status bar, e.g. "15°". */
+    public static String fineangle() {
+        return(num(180 / plobagran) + "°");
+    }
+
+    private static String num(double v) {
+        return((v == Math.rint(v)) ? Long.toString((long)v) : String.format("%.1f", v));
+    }
+
     /** Same grid as placing: tile centre, Shift = 1/plobpgran tile, Ctrl = free. */
     public static Coord2d snap(Coord2d mc, int modflags) {
         if((modflags & UI.MOD_CTRL) != 0)
@@ -597,6 +624,7 @@ public class PlannerView extends MapView {
         plan.tick();
         blueprints.tick();
         areas.tick();
+        measure.tick();
         gridwalls();
         warmclicks();
         if(terrain != null)
@@ -609,6 +637,7 @@ public class PlannerView extends MapView {
     public void draw(GOut g) {
         super.draw(g);
         areas.draw(g);
+        measure.draw(g);
         if(terrain != null)
             terrain.draw(g);
         edit.draw(g);
@@ -653,6 +682,10 @@ public class PlannerView extends MapView {
                 camera.click(ev.c);
                 drag = ui.grabmouse(this);
             }
+            return(true);
+        }
+        if(ev.b == 1 && measure.armed() != MeasureTool.Mode.NONE) {
+            measure.press(ev.c);
             return(true);
         }
         if(ev.b == 1 && blueprints.stamping()) {
@@ -720,6 +753,8 @@ public class PlannerView extends MapView {
             }
             return;
         }
+        if(measure.dragging())
+            measure.drag(ev.c);
         if(edit.dragging())
             edit.drag(ev.c, ui.modflags());
         if(terrain != null && terrain.on)
@@ -738,6 +773,10 @@ public class PlannerView extends MapView {
     }
 
     public boolean mouseup(MouseUpEvent ev) {
+        if(ev.b == 1 && measure.dragging()) {
+            measure.release();
+            return(true);
+        }
         if(ev.b == 1 && linepress != null) {
             lineend();
             return(true);
@@ -763,7 +802,9 @@ public class PlannerView extends MapView {
                 camera.release();
                 /* A right click that did not orbit stops placing. */
                 if(ev.c.dist(dragstart) < 4) {
-                    if(placingres != null)
+                    if(measure.armed() != MeasureTool.Mode.NONE)
+                        measure.disarm();
+                    else if(placingres != null)
                         cancelplace();
                     else if(blueprints.stamping())
                         blueprints.cancel();
@@ -807,6 +848,8 @@ public class PlannerView extends MapView {
             togglebb();
             return(true);
         }
+        if(measure.key(ev))
+            return(true);
         if(blueprints.key(ev))
             return(true);
         if(placingres != null) {

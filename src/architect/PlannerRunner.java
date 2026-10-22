@@ -160,6 +160,7 @@ public class PlannerRunner implements UI.Runner {
             view.areas.cancelstamp();
             view.terrain.on = false;
             view.sel.clear();
+            view.measure.disarm();
             view.play.start(view.cc);
         }
     }
@@ -174,6 +175,18 @@ public class PlannerRunner implements UI.Runner {
             scr.options.show();
             scr.options.raise();
         }
+    }
+
+    /** Closing the ruler clears its zones, as closing the game's does. */
+    void toggleMeasure() {
+        Screen scr = screen;
+        if(scr == null)
+            return;
+        scr.measureopen = !scr.measureopen;
+        if(scr.measureopen)
+            view.measure.status = "Ready";
+        else
+            view.measure.clearall();
     }
 
     void toggleBlueprints() {
@@ -236,7 +249,8 @@ public class PlannerRunner implements UI.Runner {
                 {new ToolButton("Areas", () -> view.areas.on, PlannerRunner.this::toggleAreas),
                  new ToolButton("Terrain", () -> view.terrain.on, PlannerRunner.this::toggleTerrain),
                  new ToolButton("Play", () -> view.play.on, PlannerRunner.this::togglePlay),
-                 new ToolButton("Blueprints", () -> (screen != null) && screen.blueprints.visible, PlannerRunner.this::toggleBlueprints)},
+                 new ToolButton("Blueprints", () -> (screen != null) && screen.blueprints.visible, PlannerRunner.this::toggleBlueprints),
+                 new ToolButton("Measure", () -> (screen != null) && screen.measureopen, PlannerRunner.this::toggleMeasure)},
                 {new ToolButton("Collision", () -> view.collisions.enabled, () -> view.collisions.toggle())},
             };
             int h = 0;
@@ -292,6 +306,9 @@ public class PlannerRunner implements UI.Runner {
         final WallBar wallbar;
         final BlueprintsPanel blueprints;
         final OptionsPanel options;
+        final MeasurePanel measurepanel;
+        /** The Measure window is open (it steps aside in play mode, its zones stay). */
+        boolean measureopen = false;
         final SelectionBar selbar;
         final Compass compass;
         final RenderAudit audit;
@@ -343,6 +360,8 @@ public class PlannerRunner implements UI.Runner {
             view.blueprints.placed = (p, n) -> msg(String.format("Placed %s (%d objects); Ctrl+Z takes it back", p.name, n));
             blueprints = add(new BlueprintsPanel(view, PlannerRunner.this::msg), 0, 0);
             blueprints.hide();
+            measurepanel = add(new MeasurePanel(view.measure, r -> (catalogue != null) ? catalogue.nameof(r) : r), 0, 0);
+            measurepanel.hide();
             compass = add(new Compass(view), 0, 0);
             selbar = add(new SelectionBar(view, () -> blueprints.saveselectionkey()), 0, 0);
             selbar.hide();
@@ -380,6 +399,10 @@ public class PlannerRunner implements UI.Runner {
                 return(progress);
             if(view.play.on)
                 return("Play mode   Click: walk there   WASD: move   1-4: crawl/walk/run/sprint   Shift: walk   Right-drag: turn camera   Wheel: zoom   Esc or Play: back");
+            if(view.measure.armed() == MeasureTool.Mode.SELECT)
+                return("Measure: drag a rectangle on the ground   Esc / right click: cancel");
+            if(view.measure.armed() == MeasureTool.Mode.CLEAR)
+                return("Measure: click a zone to clear it   Esc / right click: cancel");
             if(view.blueprints.stamping())
                 return("Placing blueprint " + view.blueprints.stampname() + "   Wheel / R: turn   F: mirror   Click: place   Esc / right click: cancel");
             if(view.areas.stamping())
@@ -391,7 +414,7 @@ public class PlannerRunner implements UI.Runner {
             if(architect.edit.Walls.kit(view.placing()) != null)
                 return("Drag from a post: wall (8 directions)   Click: post / gate   Crossing a wall joins it   Ctrl/Shift+wheel, R: turn a lone gate   Esc / right click: stop");
             if(view.placing() != null)
-                return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/15°   Shift: fine grid   Ctrl: snap to neighbours   Esc / right click: stop");
+                return("Click: place   R: turn 90°   Ctrl/Shift+wheel: 45°/" + PlannerView.fineangle() + "   Shift: " + PlannerView.finegrid() + "   Ctrl: snap to neighbours   Esc / right click: stop");
             if(!view.sel.isEmpty())
                 return("Drag a selected object: move all (Ctrl: stick to neighbours)   Shift+click: add/remove   R: turn   F / Shift+F: mirror   Del: delete   Arrows: nudge   Ctrl+C/V/D: copy/paste/duplicate   Esc: deselect");
             return("Click: select   Shift+click: add   Drag on ground: box select   Right-drag: orbit   Middle-drag: pan   Wheel: zoom   WASD, Q/E   Tab: top-down   Ctrl+B: bounding boxes");
@@ -410,7 +433,7 @@ public class PlannerRunner implements UI.Runner {
         }
 
         private double lastsave = Utils.rtime();
-        private double bpdemo = 0, areademo = 0, northup = 0;
+        private double bpdemo = 0, areademo = 0, northup = 0, measuredemo = 0;
         private EditCheck editcheck = null;
         private AreaCheck areacheck = null;
         private FeatureCheck featurecheck = null;
@@ -440,6 +463,12 @@ public class PlannerRunner implements UI.Runner {
             }
             if(!planning && blueprints.visible)
                 blueprints.hide();
+            if(measurepanel.visible != (measureopen && planning)) {
+                measurepanel.show(measureopen && planning);
+                if(measurepanel.visible)
+                    measurepanel.raise();
+            }
+            measurepanel.c = Coord.of((panel != null && panel.visible) ? CataloguePanel.W + UI.scale(8) : UI.scale(8), toolbar.sz.y + UI.scale(8));
             /* the compass in the view's top-right corner, below the speed switcher in play mode */
             compass.c = Coord.of(sz.x - (planning ? LayersPanel.W : 0) - Compass.SZ - UI.scale(10),
                                  toolbar.sz.y + UI.scale(10) + (planning ? 0 : speeds.sz.y + UI.scale(8)));
@@ -492,6 +521,14 @@ public class PlannerRunner implements UI.Runner {
                     if(!ad.equals("step"))
                         areaspanel.demopicker(ad);
                 }
+            }
+            /* Dev: -Darchitect.measuredemo=true opens Measure with a 7x4 zone at the view centre (screenshots) */
+            if(Boolean.getBoolean("architect.measuredemo") && cat != null && measuredemo == 0)
+                measuredemo = Utils.rtime() + 6;
+            if(measuredemo > 0 && Utils.rtime() > measuredemo) {
+                measuredemo = -1;
+                toggleMeasure();
+                view.measure.add(Area.sized(view.cc.floor(MCache.tilesz).sub(3, 2), Coord.of(7, 4)));
             }
             /* Dev: -Darchitect.northup=true turns north-up a few seconds in (screenshots) */
             if(Boolean.getBoolean("architect.northup") && northup == 0)
